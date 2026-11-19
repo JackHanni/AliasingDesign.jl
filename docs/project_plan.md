@@ -636,15 +636,18 @@ GAD paper).
 
 ## Package map
 
-| Step | Function                                                                     | Status                 |
-| ---- | ---------------------------------------------------------------------------- | ---------------------- |
-| —   | `DesignProblem`, `design_matrix`, `design_matrices`                    | constructor done       |
-| —   | `aliasing_operator`, `data_insufficiency_operator`, `error_operator`   | tests written          |
-| —   | `cost(c, prob, points[, weights])` with `Aliasing(norm)`, `Risk(norm)` | tests written          |
-| 1    | `first_variation(c, prob, points, weights)`                                | done (all norms)       |
-| 2    | `optimize_weights` (Fisher–Rao, fixed step); noise term (9a); pmf cap    | flow done; noise term and cap planned |
-| 3    | `sample_points` (quantiles); `select_points` (pool rounding)             | planned                |
-| 4    | `cost_gradient`, `optimize_points` (particle flow); `exchange` (pool)  | gradient tests written |
+All functions below are implemented and tested (245 tests; `julia run_tests.jl`). Experiment
+scripts are in [`experiments/`](../experiments/README.md).
+
+| Step | Function | Status |
+| ---- | -------- | ------ |
+| — | `DesignProblem`, `design_matrix`, `design_matrices`; bases `legendre_basis`, `monomial_basis`, `gaussian_bumps`, `fourier_basis`, `eos_basis` | done |
+| — | `aliasing_operator`, `data_insufficiency_operator`, `error_operator` (finite and weighted) | done |
+| — | `cost(c, prob, points[, weights])`, `cost_op`, with `Aliasing(norm)`, `Risk(norm)`; noise term `WithNoise(c, τ)` (9a) | done |
+| 1 | `first_variation(c, prob, points, weights)`, including (9b) | done (all norms) |
+| 2 | `optimize_weights` (Fisher–Rao), with `cap = 1/n` for pools (28); `kkt_multiplier`, `kkt_residual` | done |
+| 3 | `sample_points` (quantiles, (25)); `select_points` (pool rounding) | done |
+| 4 | `cost_gradient` (exact finite-$n$, including $I - B$); `optimize_points` (particle flow, (26)); `exchange` (pool) | done |
 
 ## Timeline
 
@@ -677,6 +680,35 @@ If time runs short, cut week 4's comparison to one example rather than dropping 
 | Noiseless cost degenerate (collapse; trivial risk)  | Noise term $S_\tau$ (9a) with a range of $\tau$; check $\operatorname{cond}(G_{\mathcal{MM}})$ of every reported design |
 | Many local optima (worst at small $\tau$)           | Several starts per run; report the spread of final costs                            |
 | Optimal atoms fall between grid points (slow, split weights) | Refine the grid near the support, or hand the points to the step-4 particle flow |
+
+## Future improvements
+
+- **Solving the right problem with the right algorithm.** The *problem* is fixed by the GAD: the
+  estimator is the minimum-norm least-squares fit $\hat\theta = M_{\mathcal{TM}}^+ y$, and $B$,
+  $I - B$ and the pseudoinverse derivative in `cost_gradient` are defined from it. The *algorithm*
+  is a separate choice: how to compute that same $\hat\theta$ accurately. Noted 2026-11-19, after
+  the cluster-expansion run on the JuCE pool, where at $n = p$ the evaluation's fit with `\` gave a
+  held-out RMSE of $2\times10^{15}$ while the costs stayed finite. Checked in Julia 1.13:
+
+  | Shape of $M$ | What `\` uses | Result |
+  |---|---|---|
+  | wide ($n < p$) | pivoted QR + rank estimate | $M^+ y$ (agrees with `pinv` to $10^{-16}$) |
+  | tall, even rank-deficient | pivoted QR + rank estimate | $M^+ y$ (agrees to $10^{-16}$) |
+  | **square** ($n = p$) | **LU, no rank estimate** | blows up near singularity ($\lVert\hat\theta\rVert = 2\times10^{12}$ vs. 0.42) |
+
+  So `\` solves the GAD's problem except for square systems. Pivoted QR,
+  `qr(M, ColumnNorm()) \ y`, gives $M^+ y$ for every shape (0.42 in the square case) without a full
+  SVD. The evaluation now uses `pinv` to match the costs. Possible changes to the package:
+  - Replace the explicit `pinv(M_TM)` in `aliasing_operator`, `data_insufficiency_operator`,
+    `error_operator`, the risk `cost_op`, `noise_variance` and `cost_gradient` by one pivoted-QR
+    factorization, reused for $A$, $B$ and the solve. Same quantities, better accuracy, and a
+    rank estimate that can be reported.
+  - Never use plain `\` on a square $M_{\mathcal{TM}}$ (it switches to LU).
+  - Near-singular designs remain ill-conditioned whatever the algorithm: the rank tolerance of
+    `pinv` or pivoted QR is an implicit regularization that the costs do not model. A principled
+    treatment is explicit regularization (ridge, or a truncation threshold tied to the noise level),
+    which changes the estimator and so has to enter the costs too.
+  - Report $\operatorname{cond}(M_{\mathcal{TM}})$ and the estimated rank for every design.
 
 ## Reading
 

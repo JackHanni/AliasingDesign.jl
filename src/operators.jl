@@ -3,7 +3,8 @@
 
 Evaluate each basis function at each point: `M[i, j] = basis[j](points[i])`.
 """
-design_matrix(basis, points) = [float(f(t)) for t in points, f in basis]
+design_matrix(basis, points) =
+    isempty(basis) ? zeros(length(points), 0) : [float(f(t)) for t in points, f in basis]
 
 """
     design_matrices(prob, points) -> (M_TM, M_TU)
@@ -11,6 +12,10 @@ design_matrix(basis, points) = [float(f(t)) for t in points, f in basis]
 The modeled and unmodeled blocks of the design matrix at `points`.
 """
 function design_matrices(prob::DesignProblem, points)
+    # A pool whose candidates are also the prediction points: reuse the stored M_𝒫.
+    if prob.M_P !== nothing && points === prob.predict
+        return (prob.M_P[:, 1:prob.p], prob.M_P[:, prob.p+1:end])
+    end
     M_TM = design_matrix(prob.basis[1:prob.p], points)
     M_TU = design_matrix(prob.basis[prob.p+1:end], points)
     return (M_TM, M_TU)
@@ -49,6 +54,9 @@ solves.
 Needs `G_MM` invertible: at least `p` points with positive weight in general position.
 """
 function weighted_fit(prob::DesignProblem, points, weights)
+    length(weights) == length(points) ||
+        throw(ArgumentError("got $(length(points)) points and $(length(weights)) weights"))
+    all(>=(0), weights) || throw(ArgumentError("weights must be nonnegative"))
     (M_TM, M_TU) = design_matrices(prob, points)
     sw = sqrt.(weights)
     F = qr(sw .* M_TM)

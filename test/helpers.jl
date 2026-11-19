@@ -1,16 +1,3 @@
-# Legendre polynomial Pₖ(t) by the three-term recurrence.
-function legendre(k, t)
-    k == 0 && return one(t)
-    p0, p1 = one(t), t
-    for j in 1:k-1
-        p0, p1 = p1, ((2j + 1) * t * p1 - j * p0) / (j + 1)
-    end
-    return p1
-end
-
-legendre_basis(nbasis) = [t -> legendre(k, t) for k in 0:nbasis-1]
-monomial_basis(nbasis) = [t -> t^k for k in 0:nbasis-1]
-
 # Legendre–Gauss nodes on [−1, 1] (roots of Pₙ), by Golub–Welsch.
 gauss_nodes(n) = eigvals(SymTridiagonal(zeros(n), [j / sqrt(4j^2 - 1) for j in 1:n-1]))
 

@@ -4,7 +4,7 @@ using LinearAlgebra
 import ForwardDiff
 using TSVD: tsvd
 
-export DesignProblem, nmodeled, nunmodeled
+export DesignProblem, with_modeled, nmodeled, nunmodeled
 export design_matrix, design_matrices
 export aliasing_operator, data_insufficiency_operator, error_operator
 export Aliasing, Risk, Frobenius, L2Norm

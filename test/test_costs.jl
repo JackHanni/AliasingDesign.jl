@@ -110,15 +110,20 @@
         @test_throws ArgumentError WithNoise(Aliasing(), -1.0)
     end
 
-    @testset "risk operator: block form equals M_P E_θ Σ^{1/2} / √n_P" begin
+    @testset "risk operator: same as M_P E_θ Σ^{1/2} / √n_P up to an orthogonal factor" begin
+        # cost_op returns the compressed Qᵀ X (M_P = Q R_P), so compare XᵀX: equal Gram matrices
+        # mean equal singular values, hence equal costs in every norm.
         D = Diagonal(sqrt.(prob.prior))
         M_P = design_matrix(prob.basis, xp)
+        gram(X) = X' * X
         for pts in (2rand(rng, 2) .- 1, 2rand(rng, 6) .- 1)       # n < p and n > p
-            @test cost_op(Risk(), prob, pts) ≈ M_P * error_operator(prob, pts) * D / sqrt(length(xp))
+            X = cost_op(Risk(), prob, pts)
+            @test size(X, 1) <= length(prob.basis)
+            @test gram(X) ≈ gram(M_P * error_operator(prob, pts) * D / sqrt(length(xp)))
         end
         g = collect(range(-1, 1; length = 9))
         w = normalize(rand(rng, 9) .+ 0.1, 1)
-        @test cost_op(Risk(), prob, g, w) ≈ M_P * error_operator(prob, g, w) * D / sqrt(length(xp))
+        @test gram(cost_op(Risk(), prob, g, w)) ≈ gram(M_P * error_operator(prob, g, w) * D / sqrt(length(xp)))
     end
 
     @testset "scaling the prior scales the cost: $(c)" for c in COSTS

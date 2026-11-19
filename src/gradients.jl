@@ -63,9 +63,9 @@ end
 # X = s M_P E_θ Σ^{1/2} with dE_θ = [−dB  −dA; 0  0], so
 # ⟨K, dX⟩ = −s⟨M_PMᵀ K_M Σ_M^{1/2}, dB⟩ − s⟨M_PMᵀ K_U Σ_U^{1/2}, dA⟩.
 function gradient_coefficients(c::Risk, prob::DesignProblem, points, M, N, P)
-    (M_PM, _) = prediction_matrices(prob)
+    (M_PM, _) = prediction_matrices(prob)    # compressed R_PM: same inner products as M_PM
     p = prob.p
-    s = 1 / sqrt(size(M_PM, 1))
+    s = 1 / sqrt(prob.n_P)
     K = get_K(c.norm, cost_op(c, prob, points))
     D = prior_sqrt(prob)
     C_B = -s * M_PM' * K[:, 1:p] * D[1:p, 1:p]
@@ -84,5 +84,5 @@ noise_dP_coefficient(::Aliasing, prob::DesignProblem, points, P) = length(points
 
 function noise_dP_coefficient(::Risk, prob::DesignProblem, points, P)
     (M_PM, _) = prediction_matrices(prob)
-    return (length(points) / size(M_PM, 1)) .* (M_PM' * (M_PM * P))
+    return (length(points) / prob.n_P) .* (M_PM' * (M_PM * P))
 end

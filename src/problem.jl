@@ -8,14 +8,26 @@ model; the first `p` are modeled (kept in the fit) and the rest are unmodeled.
   basis index `k` (1-based). Its unmodeled block is Σ_𝒰.
 - `predict`: the points where predictions are made (rows of M_𝒫). Needed for `Risk`.
 
-The prediction matrix `M_𝒫` is built once here and stored, since every `Risk` evaluation needs
-it and the prediction points never change.
+The prediction points are processed once, here, since every `Risk` evaluation needs them:
+
+- `n_P`: the number of prediction points.
+- `R_P`: `R_𝒫` from the reduced QR factorization `M_𝒫 = Q R_𝒫` (only `R_𝒫` is kept). `Q` has orthonormal columns, so `‖M_𝒫 Y‖ = ‖R_𝒫 Y‖` for every `Y`, in the
+  Frobenius and the operator norm alike: the risk costs, their first variations and gradients can
+  all use the `(p+q)`-row `R_𝒫` instead of the `n_P`-row `M_𝒫`, exactly. (When `n_P ≤ p + q`,
+  `R_𝒫 = M_𝒫`.)
+- `M_P`: `M_𝒫` itself, reused by `design_matrices` when the training points are the prediction
+  points themselves (a pool).
+
+Both are stored for the whole basis and split into modeled and unmodeled columns by views, so
+`with_modeled` can change `p` without refactoring.
 """
 struct DesignProblem{F,P}
     basis::Vector{F}
     p::Int
     prior::Vector{Float64}
     predict::P
+    n_P::Int
+    R_P::Union{Nothing,Matrix{Float64}}
     M_P::Union{Nothing,Matrix{Float64}}
 end
 
@@ -26,8 +38,23 @@ function DesignProblem(basis; p, prior = ones(length(basis)), predict = nothing)
     length(σ²) == nbasis || throw(ArgumentError("prior has length $(length(σ²)), expected $nbasis"))
     all(>=(0), σ²) || throw(ArgumentError("prior variances must be nonnegative"))
     basis = collect(basis)
-    M_P = predict === nothing ? nothing : design_matrix(basis, predict)
-    return DesignProblem(basis, p, σ², predict, M_P)
+    predict === nothing && return DesignProblem(basis, p, σ², predict, 0, nothing, nothing)
+    M_P = design_matrix(basis, predict)
+    n_P = size(M_P, 1)
+    R_P = n_P > nbasis ? Matrix(qr(M_P).R) : M_P      # thin QR only when M_𝒫 is tall
+    return DesignProblem(basis, p, σ², predict, n_P, R_P, M_P)
+end
+
+"""
+    with_modeled(prob, p)
+
+The same problem with the first `p` basis functions modeled instead of `prob.p`. Shares the
+stored prediction matrices, so sweeping `p` (risk-vs-`p` curves) costs nothing extra.
+"""
+function with_modeled(prob::DesignProblem, p::Integer)
+    1 <= p <= length(prob.basis) ||
+        throw(ArgumentError("p = $p must be between 1 and length(basis) = $(length(prob.basis))"))
+    return DesignProblem(prob.basis, Int(p), prob.prior, prob.predict, prob.n_P, prob.R_P, prob.M_P)
 end
 
 "Number of modeled basis functions, p."

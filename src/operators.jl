@@ -13,8 +13,9 @@ The modeled and unmodeled blocks of the design matrix at `points`.
 """
 function design_matrices(prob::DesignProblem, points)
     # A pool whose candidates are also the prediction points: reuse the stored M_𝒫.
+    # The returned blocks are shared with `prob`: callers must not modify them.
     if prob.M_P !== nothing && points === prob.predict
-        return (prob.M_P[:, 1:prob.p], prob.M_P[:, prob.p+1:end])
+        return (view(prob.M_P, :, 1:prob.p), view(prob.M_P, :, prob.p+1:size(prob.M_P, 2)))
     end
     M_TM = design_matrix(prob.basis[1:prob.p], points)
     M_TU = design_matrix(prob.basis[prob.p+1:end], points)
@@ -58,6 +59,12 @@ function weighted_fit(prob::DesignProblem, points, weights)
         throw(ArgumentError("got $(length(points)) points and $(length(weights)) weights"))
     all(>=(0), weights) || throw(ArgumentError("weights must be nonnegative"))
     (M_TM, M_TU) = design_matrices(prob, points)
+    return weighted_fit(M_TM, M_TU, weights)
+end
+
+# The same fit from design matrices built once, so an optimizer over weights on fixed points does
+# not rebuild them at every step.
+function weighted_fit(M_TM::AbstractMatrix, M_TU::AbstractMatrix, weights)
     sw = sqrt.(weights)
     F = qr(sw .* M_TM)
     R = UpperTriangular(F.R)

@@ -46,10 +46,12 @@ function cost(c::DesignCost, prob::DesignProblem, points)
     return sqnorm(err, c.norm)
 end
 
-function cost(c::DesignCost, prob::DesignProblem, points, weights)
-    err = cost_op(c, prob, points, weights)
-    return sqnorm(err, c.norm)
-end
+cost(c::DesignCost, prob::DesignProblem, points, weights) =
+    fit_cost(c, prob, weighted_fit(prob, points, weights))
+
+# The weighted cost, first variation and noise term from a precomputed `weighted_fit`, so that
+# callers (`optimize_weights`, `WithNoise`) can share one QR factorization among them.
+fit_cost(c::Union{Aliasing,Risk}, prob::DesignProblem, fit) = sqnorm(fit_cost_op(c, prob, fit), c.norm)
 
 """
     cost_op(c, prob, points)
@@ -60,27 +62,28 @@ These are the "X_..." operators in the writeup.
 """
 cost_op(c::Aliasing, prob::DesignProblem, points) =
     aliasing_operator(prob, points) * prior_sqrt_U(prob)
-cost_op(c::Aliasing, prob::DesignProblem, points, weights) =
-    aliasing_operator(prob, points, weights) * prior_sqrt_U(prob)
+cost_op(c::Union{Aliasing,Risk}, prob::DesignProblem, points, weights) =
+    fit_cost_op(c, prob, weighted_fit(prob, points, weights))
+
+fit_cost_op(c::Aliasing, prob::DesignProblem, fit) = fit.A * prior_sqrt_U(prob)
+fit_cost_op(c::Risk, prob::DesignProblem, fit) = risk_operator(prob, zeros(prob.p, prob.p), fit.A)  # B = I
 
 # X_risk = M_𝒫 E_θ Σ^{1/2} / √n_𝒫, computed by blocks: M_𝒫 E_θ = [M_PM (I − B)   M_PU − M_PM A].
-# Same matrix as multiplying by `error_operator`, without forming the (p+q)×(p+q) E_θ, so it costs
-# O(n_𝒫 p q) instead of O(n_𝒫 (p+q)²) — the difference matters when q is in the thousands.
+# Without forming the (p+q)×(p+q) E_θ, it costs O(n p q) instead of O(n (p+q)²). With M_𝒫 replaced by
+# R_𝒫 (M_𝒫 = Q R_𝒫, see `DesignProblem`) the rows drop from n_𝒫 to at most p + q: the returned
+# matrix is Qᵀ X_risk, with the same singular values, so every cost is unchanged.
 function cost_op(c::Risk, prob::DesignProblem, points)
     (M_TM, M_TU) = design_matrices(prob, points)
     P = pinv(M_TM)
     return risk_operator(prob, I - P * M_TM, P * M_TU)
 end
 
-cost_op(c::Risk, prob::DesignProblem, points, weights) =
-    risk_operator(prob, zeros(prob.p, prob.p), aliasing_operator(prob, points, weights))  # B = I
-
 function risk_operator(prob::DesignProblem, I_minus_B, A)
-    (M_PM, M_PU) = prediction_matrices(prob)
+    (R_PM, R_PU) = prediction_matrices(prob)
     D = prior_sqrt(prob)
     p = prob.p
-    X = [M_PM * I_minus_B * D[1:p, 1:p]  (M_PU - M_PM * A) * D[p+1:end, p+1:end]]
-    return X ./ sqrt(size(M_PM, 1))
+    X = [R_PM * I_minus_B * D[1:p, 1:p]  (R_PU - R_PM * A) * D[p+1:end, p+1:end]]
+    return X ./ sqrt(prob.n_P)
 end
 
 "Σ^{1/2}, the square root of the prior covariance of all `p + q` coefficients."
@@ -89,17 +92,18 @@ prior_sqrt(prob::DesignProblem) = Diagonal(sqrt.(prob.prior))
 "Σ_𝒰^{1/2}, the square root of the prior covariance of the unmodeled coefficients."
 prior_sqrt_U(prob::DesignProblem) = Diagonal(sqrt.(prob.prior[prob.p+1:end]))
 
-"`M_𝒫`, the full design matrix at the prediction points. Errors if `predict` was not given."
-function prediction_matrix(prob::DesignProblem)
-    prob.M_P === nothing &&
-        throw(ArgumentError("Risk needs prediction points: pass `predict` to DesignProblem"))
-    return prob.M_P
-end
+"""
+    prediction_matrices(prob) -> (R_PM, R_PU)
 
-"The modeled and unmodeled blocks `(M_PM, M_PU)` of `prediction_matrix(prob)`."
+The modeled and unmodeled blocks of the compressed prediction matrix `R_𝒫` (`M_𝒫 = Q R_𝒫`; see
+`DesignProblem`). Any norm of `M_𝒫 Y` equals that of `R_𝒫 Y`, and `M_PMᵀ M_P· = R_PMᵀ R_P·`;
+divide by `prob.n_P`, not by the row count. Errors if `predict` was not given.
+"""
 function prediction_matrices(prob::DesignProblem)
-    M_P = prediction_matrix(prob)
-    return (M_P[:, 1:prob.p], M_P[:, prob.p+1:end])
+    prob.R_P === nothing &&
+        throw(ArgumentError("Risk needs prediction points: pass `predict` to DesignProblem"))
+    R = prob.R_P
+    return (view(R, :, 1:prob.p), view(R, :, prob.p+1:size(R, 2)))
 end
 
 """
@@ -126,8 +130,8 @@ end
 
 cost(c::WithNoise, prob::DesignProblem, points) =
     cost(c.base, prob, points) + c.τ * noise_variance(c.base, prob, points)
-cost(c::WithNoise, prob::DesignProblem, points, weights) =
-    cost(c.base, prob, points, weights) + c.τ * noise_variance(c.base, prob, points, weights)
+fit_cost(c::WithNoise, prob::DesignProblem, fit) =
+    fit_cost(c.base, prob, fit) + c.τ * fit_noise_variance(c.base, prob, fit)
 
 """
     noise_variance(c, prob, points[, weights])
@@ -141,18 +145,17 @@ end
 
 function noise_variance(c::Risk, prob::DesignProblem, points)
     (M_TM, _) = design_matrices(prob, points)
-    (M_PM, _) = prediction_matrices(prob)
-    return length(points) / length(prob.predict) * sum(abs2, M_PM * pinv(M_TM))
+    (R_PM, _) = prediction_matrices(prob)
+    return length(points) / prob.n_P * sum(abs2, R_PM * pinv(M_TM))
 end
 
-# G_MM = RᵀR, so tr(G_MM⁻¹) = ‖R⁻¹‖²_F and tr(G_MM⁻¹G_𝒫) = ‖M_PM R⁻¹‖²_F / n_𝒫.
-noise_variance(c::Aliasing, prob::DesignProblem, points, weights) =
-    sum(abs2, inv(weighted_fit(prob, points, weights).R))
+noise_variance(c::Union{Aliasing,Risk}, prob::DesignProblem, points, weights) =
+    fit_noise_variance(c, prob, weighted_fit(prob, points, weights))
 
-function noise_variance(c::Risk, prob::DesignProblem, points, weights)
-    (M_PM, _) = prediction_matrices(prob)
-    return sum(abs2, M_PM / weighted_fit(prob, points, weights).R) / length(prob.predict)
-end
+# G_MM = RᵀR, so tr(G_MM⁻¹) = ‖R⁻¹‖²_F and tr(G_MM⁻¹G_𝒫) = ‖M_PM R⁻¹‖²_F / n_𝒫 = ‖R_PM R⁻¹‖²_F / n_𝒫.
+fit_noise_variance(c::Aliasing, prob::DesignProblem, fit) = sum(abs2, inv(fit.R))
+fit_noise_variance(c::Risk, prob::DesignProblem, fit) =
+    sum(abs2, first(prediction_matrices(prob)) / fit.R) / prob.n_P
 
 """
     first_variation(c, prob, points, weights)
@@ -160,8 +163,11 @@ end
 The first variation `δS/δρ` evaluated at each point, for the density given by
 `weights` on `points`. Defined up to an additive constant. Drives the Fisher–Rao flow.
 """
-function first_variation(c::Aliasing, prob::DesignProblem, points, weights)
-    (; M_TM, M_TU, R, A) = weighted_fit(prob, points, weights)
+first_variation(c::DesignCost, prob::DesignProblem, points, weights) =
+    fit_first_variation(c, prob, weighted_fit(prob, points, weights))
+
+function fit_first_variation(c::Aliasing, prob::DesignProblem, fit)
+    (; M_TM, M_TU, R, A) = fit
     D = Diagonal(sqrt.(prob.prior[prob.p+1:end]))
     K = get_K(c.norm, A * D)
     Z = (M_TM / R) / R'          # row i: (G_MM⁻¹ m(tᵢ))ᵀ
@@ -175,11 +181,11 @@ end
 #     δS/δρ(t) = −(2/√n_P) (M_PM G_MM⁻¹ m(t))ᵀ K Σ_𝒰^{1/2} (u(t) − Aᵀ m(t)).
 # X_U is built from the A already computed, so the QR factorization runs once.
 # Dropping the zero modeled-block columns of X_risk changes neither norm.
-function first_variation(c::Risk, prob::DesignProblem, points, weights)
-    (; M_TM, M_TU, R, A) = weighted_fit(prob, points, weights)
-    (M_PM, M_PU) = prediction_matrices(prob)
+function fit_first_variation(c::Risk, prob::DesignProblem, fit)
+    (; M_TM, M_TU, R, A) = fit
+    (M_PM, M_PU) = prediction_matrices(prob)    # compressed: R_PM, R_PU
     D = Diagonal(sqrt.(prob.prior[prob.p+1:end]))
-    s = 1 / sqrt(length(prob.predict))
+    s = 1 / sqrt(prob.n_P)
     K = get_K(c.norm, s * (M_PU - M_PM * A) * D)
     Z = (M_TM / R) / R'          # row i: (G_MM⁻¹ m(tᵢ))ᵀ
     Res = M_TU - M_TM * A        # row i: (u(tᵢ) − Aᵀ m(tᵢ))ᵀ
@@ -189,21 +195,21 @@ function first_variation(c::Risk, prob::DesignProblem, points, weights)
 end
 
 # Noise term, eq. (9b): δV_alias/δρ(t) = −‖G_MM⁻¹ m(t)‖², δV_risk/δρ(t) = −‖M_PM G_MM⁻¹ m(t)‖² / n_𝒫.
-first_variation(c::WithNoise, prob::DesignProblem, points, weights) =
-    first_variation(c.base, prob, points, weights) .+ c.τ .* noise_first_variation(c.base, prob, points, weights)
+fit_first_variation(c::WithNoise, prob::DesignProblem, fit) =
+    fit_first_variation(c.base, prob, fit) .+ c.τ .* fit_noise_first_variation(c.base, prob, fit)
 
-function noise_first_variation(c::Aliasing, prob::DesignProblem, points, weights)
-    (; M_TM, R) = weighted_fit(prob, points, weights)
+function fit_noise_first_variation(c::Aliasing, prob::DesignProblem, fit)
+    (; M_TM, R) = fit
     Z = (M_TM / R) / R'          # row i: (G_MM⁻¹ m(tᵢ))ᵀ
     return -vec(sum(abs2, Z; dims = 2))
 end
 
-function noise_first_variation(c::Risk, prob::DesignProblem, points, weights)
-    (; M_TM, R) = weighted_fit(prob, points, weights)
-    (M_PM, _) = prediction_matrices(prob)
+function fit_noise_first_variation(c::Risk, prob::DesignProblem, fit)
+    (; M_TM, R) = fit
+    (R_PM, _) = prediction_matrices(prob)
     Z = (M_TM / R) / R'
-    # ‖M_PM zᵢ‖² = zᵢᵀ (M_PMᵀM_PM) zᵢ, through the small p × p Gram matrix.
-    return -vec(sum((Z * (M_PM' * M_PM)) .* Z; dims = 2)) ./ size(M_PM, 1)
+    # ‖M_PM zᵢ‖² = zᵢᵀ (M_PMᵀM_PM) zᵢ = zᵢᵀ (R_PMᵀR_PM) zᵢ, through the small p × p Gram matrix.
+    return -vec(sum((Z * (R_PM' * R_PM)) .* Z; dims = 2)) ./ prob.n_P
 end
 
 get_K(c::DesignCost, prob::DesignProblem, points, weights) =
@@ -263,11 +269,17 @@ Returns a named tuple:
 function optimize_weights(c::DesignCost, prob::DesignProblem, points, weights;
                           maxiter = 10_000, rtol = 1e-8, η = 1.0, cap = nothing)
     weights = cap === nothing ? weights ./ sum(weights) : project_capped(weights, cap)
+    length(weights) == length(points) ||
+        throw(ArgumentError("got $(length(points)) points and $(length(weights)) weights"))
+    # The points are fixed, so build the design matrices once. Each accepted step's fit (one QR)
+    # then serves both its cost and the next first variation.
+    (M_TM, M_TU) = design_matrices(prob, points)
+    fit = weighted_fit(M_TM, M_TU, weights)
+    S = fit_cost(c, prob, fit)
     λ, residual, iterations, converged = NaN, Inf, 0, false
-    S = cost(c, prob, points, weights)
     step_size = NaN
     for iter in 1:maxiter
-        δS_δρ = first_variation(c, prob, points, weights)
+        δS_δρ = fit_first_variation(c, prob, fit)
         λ = kkt_multiplier(δS_δρ, weights; cap)
         residual = kkt_residual(δS_δρ, weights, λ; cap)
         # g has the units of the cost (weights are dimensionless). At an exact optimum g can be
@@ -288,9 +300,9 @@ function optimize_weights(c::DesignCost, prob::DesignProblem, points, weights;
             trial = zeros(length(weights))
             trial[pos] = weights[pos] .* exp.(z .- maximum(z))
             trial = cap === nothing ? trial ./ sum(trial) : project_capped(trial, cap)
-            S_trial = trial_cost(c, prob, points, trial)
+            S_trial, fit_trial = trial_cost(c, prob, M_TM, M_TU, trial)
             if S_trial <= S                  # false for NaN: a step to a singular G_MM is refused
-                weights, S = trial, S_trial
+                weights, S, fit = trial, S_trial, fit_trial
                 break
             end
             step_size /= 2
@@ -303,20 +315,21 @@ function optimize_weights(c::DesignCost, prob::DesignProblem, points, weights;
         iterations = iter
     end
     if !converged   # the loop's λ and residual belong to the weights before the last update
-        δS_δρ = first_variation(c, prob, points, weights)
+        δS_δρ = fit_first_variation(c, prob, fit)
         λ = kkt_multiplier(δS_δρ, weights; cap)
         residual = kkt_residual(δS_δρ, weights, λ; cap)
     end
-    return (; weights, cost = cost(c, prob, points, weights), λ, residual, iterations, converged)
+    return (; weights, cost = S, λ, residual, iterations, converged)
 end
 
-# The cost at trial weights, or Inf if they leave G_MM exactly singular (fewer than p support
-# points), so the optimizer refuses that step like any other that raises the cost.
-function trial_cost(c, prob, points, weights)
+# The cost and fit at trial weights, or (Inf, nothing) if they leave G_MM exactly singular (fewer
+# than p support points), so the optimizer refuses that step like any other that raises the cost.
+function trial_cost(c, prob, M_TM, M_TU, weights)
     try
-        return cost(c, prob, points, weights)
+        fit = weighted_fit(M_TM, M_TU, weights)
+        return fit_cost(c, prob, fit), fit
     catch err
-        err isa SingularException && return Inf
+        err isa SingularException && return Inf, nothing
         rethrow()
     end
 end

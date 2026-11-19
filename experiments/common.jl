@@ -11,6 +11,21 @@ using Statistics
 # FULL=1 runs the sizes used in the plan's findings (more starts, more iterations); the default
 # is a quicker run with the same structure.
 const FULL = get(ENV, "FULL", "0") == "1"
+
+# Independent runs (starts, random designs, sweeps) go on separate threads: start Julia with
+# `-t auto`. Each run's linear algebra is small, so BLAS gets one thread per Julia thread instead
+# of every thread competing for all cores.
+Threads.nthreads() > 1 && BLAS.set_num_threads(1)
+
+"Run `f(x)` for every `x` in `xs` on the available threads; results in the order of `xs`."
+function tmap(f, xs)
+    xs = collect(xs)
+    out = Vector{Any}(undef, length(xs))
+    Threads.@threads for i in eachindex(xs)
+        out[i] = f(xs[i])
+    end
+    return [o for o in out]
+end
 const STARTS = FULL ? 6 : 4
 const MAXITER = FULL ? 20_000 : 5_000
 
@@ -53,7 +68,7 @@ sorted by cost and the number of distinct optima (costs differing by more than 1
 function multistart(c, prob, grid; starts = STARTS, rng = Xoshiro(1), maxiter = MAXITER, η = 8, kwargs...)
     N = length(grid)
     inits = [[fill(1 / N, N)]; [normalize(rand(rng, N) .+ 0.05, 1) for _ in 2:starts]]
-    runs = [optimize_weights(c, prob, grid, w0; maxiter, η, kwargs...) for w0 in inits]
+    runs = tmap(w0 -> optimize_weights(c, prob, grid, w0; maxiter, η, kwargs...), inits)
     sort!(runs; by = r -> r.cost)
     costs = [r.cost for r in runs]
     distinct = 1 + count(i -> costs[i] - costs[i-1] > 1e-4 * max(abs(costs[i]), eps()), 2:length(costs))
@@ -94,8 +109,8 @@ end
 "Best of several particle-flow runs from random starts in `domain`."
 function best_particle_flow(c, prob, n, domain; starts = STARTS, rng = Xoshiro(2), maxiter = 2_000)
     lo, hi = domain
-    runs = [optimize_points(c, prob, sort(lo .+ (hi - lo) .* rand(rng, n)); domain, maxiter)
-            for _ in 1:starts]
+    starts_pts = [sort(lo .+ (hi - lo) .* rand(rng, n)) for _ in 1:starts]   # drawn up front: rng is not thread-safe
+    runs = tmap(x -> optimize_points(c, prob, x; domain, maxiter), starts_pts)
     best = argmin(r -> r.cost, runs)
     return (; points = sort(best.points), cost = best.cost)
 end

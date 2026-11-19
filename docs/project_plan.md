@@ -151,6 +151,29 @@ The operator norm is not differentiable where the top two singular values cross.
 version is smooth, so use it as a check and as a fallback when the operator-norm flow stalls at
 a crossing.
 
+**Expected aliasing, and why not the paper's $\lVert A\rVert$.** The GAD paper measures aliasing
+by the label-free aliasing norm $\lVert A\rVert_2 = \sigma_{\max}(A)$ (as in JuCE's reproduction of
+its figures). That is the most a *unit-size* vector of unmodeled coefficients can leak into the fit:
+it weights every unmodeled coefficient equally. Here the unmodeled coefficients have a prior, and the
+aliasing error in the fitted parameters is $A\theta_{\mathcal U}$, so its expected size is
+
+$$
+\mathbb E\lVert A\theta_{\mathcal U}\rVert^2 = \operatorname{tr}\big(A\Sigma_{\mathcal U}A^\top\big)
+= \lVert A\Sigma_{\mathcal U}^{1/2}\rVert_F^2 \tag{9′}
+$$
+
+the Frobenius cost (9). This reduces to $\lVert A\rVert_F^2$ only when $\Sigma_{\mathcal U} = I$. In the
+cluster expansion the prior shrinks with cluster size and diameter, so an unweighted norm lets a
+column carrying a tiny 8-body coefficient count as much as one carrying a large nearest-neighbor
+triplet; $\Sigma_{\mathcal U}^{1/2}$ scales each column of $A$ by the size of the coefficient that leaks
+through it, turning "how much *could* leak" into "how much leaks on average". In the experiments,
+**expected aliasing** is this quantity plus the noise term of (9a),
+$\lVert A\Sigma_{\mathcal U}^{1/2}\rVert_F^2 + \sigma_\epsilon^2\lVert M_{\mathcal{TM}}^+\rVert_F^2$, which is exactly
+the expectation of the **parameter aliasing** $\lVert\hat\theta_{\mathcal M} - B\theta_{\mathcal M}\rVert^2$
+measured on fits to synthetic data (subtracting $B\theta_{\mathcal M}$ removes data insufficiency, so
+this isolates aliasing for any $n$ and $p$). The paper's $\lVert A\rVert_2$ is plotted alongside, for
+direct comparison with its figures.
+
 **Designs as distributions.** A design of $n$ points is the distribution that puts weight $1/n$
 on each point, and (4) is the Gram matrix under that distribution. The plan optimizes over *all*
 distributions instead: densities $\rho$ on a continuous domain, or weights $w$ on a finite
@@ -649,6 +672,30 @@ scripts are in [`experiments/`](../experiments/README.md).
 | 3 | `sample_points` (quantiles, (25)); `select_points` (pool rounding) | done |
 | 4 | `cost_gradient` (exact finite-$n$, including $I - B$); `optimize_points` (particle flow, (26)); `exchange` (pool) | done |
 
+
+**Implementation notes.**
+
+- *Prediction matrix, by reduced QR when it is tall.* Every risk quantity (the cost, its first
+  variation and gradient, the noise term) is a norm of $M_{\mathcal P}Y$ or an inner product
+  $M_{\mathcal P}^\top M_{\mathcal P}$. With the reduced QR factorization
+  $M_{\mathcal P} = QR_{\mathcal P}$, $Q$ has orthonormal columns, so
+  $\lVert M_{\mathcal P}Y\rVert = \lVert R_{\mathcal P}Y\rVert$ in both the Frobenius and the
+  operator norm, and $M_{\mathcal P}^\top M_{\mathcal P} = R_{\mathcal P}^\top R_{\mathcal P}$:
+  $R_{\mathcal P}$ replaces $M_{\mathcal P}$ exactly. It is applied only when it helps, when
+  $M_{\mathcal P}$ is tall ($n_{\mathcal P} > p + q$): $R_{\mathcal P}$ then has $p + q$ rows instead
+  of $n_{\mathcal P}$ (2,346 → 300 for the cluster-expansion pool with 300 clusters, 50 → 7 for the 1D
+  benchmark). When $n_{\mathcal P} \le p + q$, $M_{\mathcal P}$ is used as is. `DesignProblem`
+  factorizes once, keeps only $R_{\mathcal P}$ (never $Q$) for the whole basis, and splits it into
+  modeled and unmodeled columns by views, so `with_modeled(prob, p)` changes $p$ for free. Divide by
+  $n_{\mathcal P}$, not by the row count of $R_{\mathcal P}$.
+- *Weighted fits by QR.* $A[\rho]$ comes from a QR factorization of $\sqrt W M_{\mathcal{TM}}$
+  (`weighted_fit`), never from forming $G_{\mathcal{MM}}$, which would square the condition number.
+  `optimize_weights` builds the design matrices once per run and reuses each accepted step's fit
+  for the next first variation; `WithNoise` shares one fit between its two terms.
+- *Risk operator by blocks.* $M_{\mathcal P}E_\theta$ is computed as
+  $[M_{\mathcal{PM}}(I - B)\ \ M_{\mathcal{PU}} - M_{\mathcal{PM}}A]$, without forming the
+  $(p+q)\times(p+q)$ matrix $E_\theta$.
+
 ## Timeline
 
 Weeks count from 2026-10-27; the class deadline is not yet set.
@@ -680,6 +727,49 @@ If time runs short, cut week 4's comparison to one example rather than dropping 
 | Noiseless cost degenerate (collapse; trivial risk)  | Noise term $S_\tau$ (9a) with a range of $\tau$; check $\operatorname{cond}(G_{\mathcal{MM}})$ of every reported design |
 | Many local optima (worst at small $\tau$)           | Several starts per run; report the spread of final costs                            |
 | Optimal atoms fall between grid points (slow, split weights) | Refine the grid near the support, or hand the points to the step-4 particle flow |
+
+
+## Relation to the GAD paper
+
+*Pending a full check: Sections II.2–II.3.5 of the paper (arXiv:2408.08294v4) were read verbatim;
+Sections III–IV and the bibliography only in summary. Read those, and discuss with Gus, before
+claiming novelty in the write-up.*
+
+**What the paper does.** It measures aliasing by the spectral norm $\lVert A\rVert_2$ (Section II.3:
+"the induced norm is often called the spectral norm") and relates it to error through
+deterministic bounds ($R_\theta \le \lVert M\rVert^2\lVert E_\theta\rVert^2\lVert\theta\rVert^2$;
+$\lVert A\rVert \le \lVert M^+_{\mathcal{TM}}\rVert\,\lVert M_{\mathcal{TU}}\rVert$). It deliberately avoids θ: aliasing
+"can be analyzed without knowing θ or the labels y". Its only expectation over θ (Eqs. 29–30) is for
+the insufficiency terms, under an isotropic prior (θ i.i.d., variance $\sigma^2$); A is never averaged
+over θ and never weighted by a prior.
+
+**What this project adds.** The expected aliasing (9′), $\mathbb E\lVert A\theta_{\mathcal U}\rVert^2 =
+\lVert A\Sigma_{\mathcal U}^{1/2}\rVert_F^2$: the exact expectation of the paper's parameter aliasing under a
+prior on the unmodeled coefficients. With the paper's own isotropic assumption it is
+$\sigma^2\lVert A\rVert_F^2$; a non-isotropic $\Sigma_{\mathcal U}$ lets physical knowledge in (larger clusters have
+smaller ECIs). Unlike $\lVert A\rVert_2$, which is a worst-case gain and needs $\lVert\theta_{\mathcal U}\rVert$ before
+it bounds anything, it predicts the error itself, with a known spread
+($\operatorname{Var}\lVert A\theta_{\mathcal U}\rVert^2 = 2\lVert A\Sigma_{\mathcal U}A^\top\rVert_F^2$ for Gaussian $\theta_{\mathcal U}$)
+and probabilistic bounds (Markov; Hanson–Wright). It is an expectation, not a bound.
+
+**Prior work to cite.** The paper's A is the classical *alias matrix* of experimental design (Box &
+Draper, 1959, "A basis for the selection of a response surface design", *J. Amer. Statist. Assoc.*),
+and prior-weighted bias from omitted terms appears in Bayesian design with "potential terms"
+(DuMouchel & Jones, 1994, *Technometrics*). The defensible claim is bringing prior-weighted
+expected aliasing, and label-free optimal design, into the GAD framework, not the idea itself.
+Citations from memory; check details before citing.
+
+**Optimal experimental design without labels.** The design step uses only the candidates' design
+matrix (structures, not energies), the modeling choice p, the prior Σ (coefficient *sizes*, not
+values), the prediction inputs and the noise level. It never uses labels or true parameters, so rows
+are chosen before any DFT is run. Truth enters only in evaluating designs (held-out risk and
+parameter aliasing on synthetic data). The prior is the one assumption: from geometry alone
+(cluster expansion), from a different system (equation of state: Al for Cu), or from a calibration
+split of existing data (kept apart from validation).
+
+**Whether it matters is empirical.** The cluster-expansion experiments test it: across training
+sets, does expected aliasing track the measured parameter aliasing and held-out risk better than
+$\lVert A\rVert_2$? The decisive case is a truth the prior did not anticipate (`TRUTH=unit`).
 
 ## Future improvements
 

@@ -1,22 +1,16 @@
 module AliasingDesign
 
 using LinearAlgebra
+using TSVD: tsvd
 
-export design_matrix, aliasing_operator
+export DesignProblem, nmodeled, nunmodeled
+export design_matrix, design_matrices
+export aliasing_operator, data_insufficiency_operator, error_operator
+export Aliasing, Risk, Frobenius, L2Norm
+export cost, cost_gradient, first_variation
 
-"""
-    design_matrix(basis, points)
-
-Evaluate each basis function at each point: `M[i, j] = basis[j](points[i])`.
-"""
-design_matrix(basis, points) = [f(t) for t in points, f in basis]
-
-"""
-    aliasing_operator(M_TM, M_TU)
-
-The GAD aliasing operator `A = M_TM⁺ M_TU`: how unmodeled coefficients leak into
-the fitted modeled coefficients.
-"""
-aliasing_operator(M_TM, M_TU) = pinv(M_TM) * M_TU
+include("problem.jl")
+include("operators.jl")
+include("costs.jl")
 
 end # module AliasingDesign

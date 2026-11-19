@@ -16,6 +16,15 @@ Pkg.develop(path = "path/to/AliasingDesign.jl")
 
 ## Run the tests
 
+For a readable report (a tree of test groups, which stubs are still pending, and failures
+grouped by cause), run from the package folder:
+
+```
+julia run_tests.jl            # add --verbose for full stack traces
+```
+
+Or use the standard test runner:
+
 ```julia
 using Pkg
 Pkg.activate("path/to/AliasingDesign.jl")

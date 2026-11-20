@@ -144,4 +144,48 @@
 
         @test_throws ArgumentError exchange(Aliasing(), prob, pool, [1, 1, 2, 3, 4])
     end
+
+    @testset "fast selection (greedy, fast exchange)" begin
+        pool = collect(range(-1, 1; length = 30))
+        prob = DesignProblem(legendre_basis(12); p = 4, prior = k -> 1 / k^2, predict = range(-1, 1; length = 40))
+        costs = (Aliasing(), Risk(), WithNoise(Aliasing(), 0.01), WithNoise(Risk(), 0.01))
+        rng = Xoshiro(3)
+        for c in costs
+            pc = AliasingDesign.PoolCache(c, prob, pool)
+            for n in (4, 7, 12)
+                S = sort(randperm(rng, 30)[1:n])
+                H, P1, P2, B = AliasingDesign.set_matrices(pc, S)
+                @test AliasingDesign.fast_cost(pc, H, P1, P2, n) ≈ cost(c, prob, pool[S]) rtol = 1e-8
+                # Rank updates agree with rebuilding the matrices from scratch.
+                j = first(setdiff(1:30, S))
+                @test collect(AliasingDesign.added(pc, H, P1, P2, B, j)) ≈
+                      collect(AliasingDesign.set_matrices(pc, sort([S; j]))[1:3])
+                o = S[2]
+                @test collect(AliasingDesign.swapped(pc, H, P1, P2, B, o, j)) ≈
+                      collect(AliasingDesign.set_matrices(pc, sort(replace(S, o => j)))[1:3])
+            end
+        end
+        # A rank-deficient set has no fast cost.
+        pc = AliasingDesign.PoolCache(Risk(), prob, pool)
+        H, P1, P2, _ = AliasingDesign.set_matrices(pc, [1, 2, 3])
+        @test AliasingDesign.fast_cost(pc, H, P1, P2, 3) == Inf
+
+        c = WithNoise(Risk(), 1e-4)
+        g = greedy_select(c, prob, pool, 10)
+        @test length(g.selected) == 10 && allunique(g.selected)
+        @test sort(g.path) == g.selected
+        @test sort(greedy_select(c, prob, pool, 7).path) == sort(g.path[1:7])   # nested sets
+        random_costs = [cost(c, prob, pool[sort(randperm(rng, 30)[1:10])]) for _ in 1:50]
+        @test cost(c, prob, pool[g.selected]) <= sort(random_costs)[25]   # the median
+
+        start = sort(randperm(rng, 30)[1:10])
+        r = exchange(c, prob, pool, start; fast = true)
+        @test r.cost <= cost(c, prob, pool[start])
+        @test r.cost ≈ cost(c, prob, pool[r.selected])
+        @test length(r.selected) == 10 && allunique(r.selected)
+        slow = exchange(c, prob, pool, start)
+        @test r.cost <= 1.05 * slow.cost
+        @test_throws ArgumentError exchange(c, prob, pool, [1, 2]; fast = true)
+        @test_throws ArgumentError greedy_select(Risk(L2Norm()), prob, pool, 6)
+    end
 end

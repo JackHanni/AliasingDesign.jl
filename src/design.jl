@@ -93,7 +93,7 @@ function projected_gradient(g, points, domain)
 end
 
 """
-    exchange(c, prob, pool, selected; candidates = 20, maxiter = 1_000)
+    exchange(c, prob, pool, selected; candidates = 20, maxiter = 1_000, fast = false)
         -> (; selected, cost, swaps)
 
 Step 4 for a pool (Fedorov exchange): starting from the indices `selected` into `pool`,
@@ -104,8 +104,14 @@ Only the `candidates` unselected structures with the lowest first variation (com
 weight `1/n` on the selection) are tried as additions; `candidates = length(pool)` tries every
 swap, so the result is then a local optimum over all single swaps. Needs `n ≥ p` for the
 ranking.
+
+`fast = true` (Frobenius costs, `n ≥ p`) ranks the trial swaps with rank-two updates of p × p
+matrices instead of refitting (see `src/selection.jl`), on all threads, and checks the best few
+with the exact cost before accepting one. Much faster when there are many unmodeled functions.
 """
-function exchange(c::DesignCost, prob::DesignProblem, pool, selected; candidates = 20, maxiter = 1_000)
+function exchange(c::DesignCost, prob::DesignProblem, pool, selected; candidates = 20, maxiter = 1_000,
+                  fast = false)
+    fast && return fast_exchange(c, prob, pool, selected; candidates, maxiter)
     selected = sort(collect(selected))
     n, N = length(selected), length(pool)
     allunique(selected) || throw(ArgumentError("selected indices must be distinct"))

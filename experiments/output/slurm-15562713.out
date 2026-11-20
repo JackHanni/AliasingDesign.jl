@@ -1,0 +1,15 @@
+job 15562713 on m8-20-7: experiments/aspect_ratio.jl with 16 threads (Thu 19 Nov 2026 05:14:50 PM MST)
+loaded 2346 structures × 2344 clusters from experiments/data; the true model uses the first 2344
+312 evaluations on 16 threads
+  wrote output/aspect_ratio/aspect_ratio_truth_unit.csv
+  wrote output/aspect_ratio/aspect_ratio_summary_truth_unit.csv
+  wrote output/aspect_ratio/aspect_ratio_truth_unit.png
+job 15562713 on m8-20-7: experiments/cluster_expansion_paper.jl with 16 threads (Thu 19 Nov 2026 05:16:18 PM MST)
+loaded 2346 structures × 2344 clusters from experiments/data; the true model uses the first 2344
+p grid: 116 values from 1 to 2343
+optimizing training sets for p = 100, 300 (300 iterations each)
+  p* = 100: relaxed cost 1.1947e+00, rounded cost 1.3066e+00
+  p* = 300: relaxed cost 6.4921e-01, rounded cost 1.2816e+00
+evaluating 1508 (design, p) pairs on 16 threads
+  wrote output/cluster_expansion_paper/risk_vs_p_truth_unit.csv
+  wrote output/cluster_expansion_paper/risk_vs_p_truth_unit.png

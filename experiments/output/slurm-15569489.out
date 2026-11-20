@@ -1,0 +1,35 @@
+job 15569489 on m8-18-4: experiments/benchmark_optimizer.jl with 16 threads (Thu 19 Nov 2026 11:14:22 PM MST)
+loaded 2346 structures × 2344 clusters from experiments/data; the true model uses the first 2344
+  JuCE pool, p = 100, ≤ 1000 iterations fixed  cost 1.1946625090e+00  residual 4.72e-08  iterations  1000  converged false   308.48 s
+  JuCE pool, p = 100, ≤ 1000 iterations grow   cost 1.1946625090e+00  residual 3.68e-08  iterations  1000  converged false   375.51 s
+  JuCE pool, p = 100, ≤ 1000 iterations clean  cost 1.1946625090e+00  residual 5.48e-08  iterations  1000  converged false   349.83 s
+  JuCE pool, p = 100, ≤ 1000 iterations ratio  cost 1.1946625090e+00  residual 5.61e-08  iterations  1000  converged false   342.63 s
+  JuCE pool, p = 100, ≤ 1000 iterations bb     cost 1.1946625090e+00  residual 8.81e-09  iterations    39  converged true     17.77 s
+  JuCE pool, p = 300, ≤ 1000 iterations fixed  cost 6.4920503633e-01  residual 3.84e-08  iterations  1000  converged false   390.99 s
+  JuCE pool, p = 300, ≤ 1000 iterations grow   cost 6.4920503633e-01  residual 1.47e-07  iterations   158  converged false    92.45 s
+  JuCE pool, p = 300, ≤ 1000 iterations clean  cost 6.4920503633e-01  residual 4.68e-08  iterations  1000  converged false   479.39 s
+  JuCE pool, p = 300, ≤ 1000 iterations ratio  cost 6.4920503633e-01  residual 4.75e-08  iterations  1000  converged false   411.67 s
+  JuCE pool, p = 300, ≤ 1000 iterations bb     cost 6.4920503633e-01  residual 7.60e-09  iterations    77  converged false    66.02 s
+  Legendre risk, p = 10 of 30          fixed  cost 2.1284070683e-03  residual 1.25e-17  iterations     0  converged true      0.00 s
+  Legendre risk, p = 10 of 30          grow   cost 2.1284070683e-03  residual 1.25e-17  iterations     0  converged true      0.00 s
+  Legendre risk, p = 10 of 30          clean  cost 2.1284070683e-03  residual 1.25e-17  iterations     0  converged true      0.00 s
+  Legendre risk, p = 10 of 30          ratio  cost 2.1284070683e-03  residual 1.25e-17  iterations     0  converged true      0.00 s
+  Legendre risk, p = 10 of 30          bb     cost 2.1284070683e-03  residual 1.25e-17  iterations     0  converged true      0.00 s
+  Legendre aliasing, p = 10 of 30      fixed  cost 1.4333795786e-31  residual 7.71e-17  iterations 20000  converged false    15.22 s
+  Legendre aliasing, p = 10 of 30      grow   cost 9.0516002594e-32  residual 7.42e-17  iterations  6974  converged false     6.67 s
+  Legendre aliasing, p = 10 of 30      clean  cost 1.2120198942e-31  residual 9.99e-17  iterations 20000  converged false    18.34 s
+  Legendre aliasing, p = 10 of 30      ratio  cost 1.2084679367e-31  residual 5.10e-17  iterations  6025  converged false     4.76 s
+  Legendre aliasing, p = 10 of 30      bb     cost 3.5172474584e-32  residual 1.20e-16  iterations  1811  converged false     1.97 s
+  Legendre aliasing, capped 1/40       fixed  cost 1.6315668975e-31  residual 1.06e-16  iterations 20000  converged false    14.52 s
+  Legendre aliasing, capped 1/40       grow   cost 5.4867175773e-32  residual 5.47e-17  iterations 20000  converged false    19.15 s
+  Legendre aliasing, capped 1/40       clean  cost 1.1503754308e-31  residual 1.09e-16  iterations 20000  converged false    17.83 s
+  Legendre aliasing, capped 1/40       ratio  cost 7.1493156601e-32  residual 8.85e-17  iterations 20000  converged false    14.71 s
+  Legendre aliasing, capped 1/40       bb     cost 2.4228675706e-32  residual 1.35e-16  iterations  1955  converged false     2.13 s
+  Legendre risk + noise, p = 20 of 60  fixed  cost 2.3971646894e-03  residual 4.13e-08  iterations 20000  converged false    39.06 s
+  Legendre risk + noise, p = 20 of 60  grow   cost 2.3971646311e-03  residual 1.15e-10  iterations  8747  converged false    21.76 s
+  Legendre risk + noise, p = 20 of 60  clean  cost 2.3971646311e-03  residual 1.18e-10  iterations  6588  converged false    15.19 s
+  Legendre risk + noise, p = 20 of 60  ratio  cost 2.3971646311e-03  residual 6.17e-10  iterations  4943  converged false    11.49 s
+  Legendre risk + noise, p = 20 of 60  bb     cost 2.3971646311e-03  residual 2.01e-10  iterations  1442  converged false     4.34 s
+Precompiling packages...
+   1696.9 ms  ✓ AliasingDesign
+  1 dependency successfully precompiled in 3 seconds. 22 already precompiled.

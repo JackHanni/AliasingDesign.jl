@@ -1,0 +1,25 @@
+job 15566994 on m12-1-1: experiments/cluster_expansion_paper.jl with 32 threads (Thu 19 Nov 2026 08:48:15 PM MST)
+loaded 2346 structures × 2344 clusters from experiments/data; the true model uses the first 2344
+p grid: 2343 values from 1 to 2343
+optimizing training sets for p = 100, 300 (300 iterations each)
+  p* = 100: relaxed cost 1.1947e+00, rounded cost 1.3066e+00
+  p* = 300: relaxed cost 6.4921e-01, rounded cost 1.2816e+00
+  wrote output/cluster_expansion_paper/training_sets.csv
+evaluating 13 training sets × 2343 values of p on 32 threads
+  natural                     4.3 min
+  random 1                    4.4 min
+  random 2                    4.3 min
+  random 3                    4.5 min
+  random 4                    4.3 min
+  random 5                    4.4 min
+  random 6                    4.5 min
+  random 7                    4.5 min
+  random 8                    4.4 min
+  random 9                    4.4 min
+  random 10                   4.5 min
+  optimized at p = 100        4.4 min
+  optimized at p = 300        4.6 min
+  wrote output/cluster_expansion_paper/risk_vs_p_truth_prior.csv
+  wrote output/cluster_expansion_paper/risk_vs_p_truth_prior.png
+  wrote output/cluster_expansion_paper/risk_vs_p_truth_unit.csv
+  wrote output/cluster_expansion_paper/risk_vs_p_truth_unit.png

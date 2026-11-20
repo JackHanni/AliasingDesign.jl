@@ -1,0 +1,52 @@
+job 15565285 on m12-1-3: experiments/cluster_expansion_paper.jl with 32 threads (Thu 19 Nov 2026 08:16:34 PM MST)
+loaded 2346 structures × 2344 clusters from experiments/data; the true model uses the first 2344
+p grid: 2343 values from 1 to 2343
+optimizing training sets for p = 100, 300 (300 iterations each)
+  p* = 100: relaxed cost 1.1947e+00, rounded cost 1.3066e+00
+  p* = 300: relaxed cost 6.4921e-01, rounded cost 1.2816e+00
+  wrote output/cluster_expansion_paper/training_sets.csv
+evaluating 13 training sets × 2343 values of p on 32 threads
+ERROR: LoadError: TaskFailedException
+
+    nested task error: LAPACKException(1)
+    Stacktrace:
+      [1] chklapackerror_positive(::Int64)
+        @ LinearAlgebra.LAPACK /vapps/rhel9/x86_64/spack/root/opt/spack/linux-rhel9-haswell/gcc-13.2.0/julia-1.12.6-dnqrzweknooxxbvvvkwvlkkveqlce3ln/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/lapack.jl:44
+      [2] chklapackerror
+        @ /vapps/rhel9/x86_64/spack/root/opt/spack/linux-rhel9-haswell/gcc-13.2.0/julia-1.12.6-dnqrzweknooxxbvvvkwvlkkveqlce3ln/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/lapack.jl:40 [inlined]
+      [3] gesdd!(job::Char, A::Matrix{Float64})
+        @ LinearAlgebra.LAPACK /vapps/rhel9/x86_64/spack/root/opt/spack/linux-rhel9-haswell/gcc-13.2.0/julia-1.12.6-dnqrzweknooxxbvvvkwvlkkveqlce3ln/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/lapack.jl:1714
+      [4] _svd!
+        @ /vapps/rhel9/x86_64/spack/root/opt/spack/linux-rhel9-haswell/gcc-13.2.0/julia-1.12.6-dnqrzweknooxxbvvvkwvlkkveqlce3ln/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/svd.jl:125 [inlined]
+      [5] svd!(A::Matrix{Float64}; full::Bool, alg::LinearAlgebra.DivideAndConquer)
+        @ LinearAlgebra /vapps/rhel9/x86_64/spack/root/opt/spack/linux-rhel9-haswell/gcc-13.2.0/julia-1.12.6-dnqrzweknooxxbvvvkwvlkkveqlce3ln/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/svd.jl:105
+      [6] svd!
+        @ /vapps/rhel9/x86_64/spack/root/opt/spack/linux-rhel9-haswell/gcc-13.2.0/julia-1.12.6-dnqrzweknooxxbvvvkwvlkkveqlce3ln/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/svd.jl:100 [inlined]
+      [7] svd(A::Matrix{Float64}; full::Bool, alg::LinearAlgebra.DivideAndConquer)
+        @ LinearAlgebra /vapps/rhel9/x86_64/spack/root/opt/spack/linux-rhel9-haswell/gcc-13.2.0/julia-1.12.6-dnqrzweknooxxbvvvkwvlkkveqlce3ln/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/svd.jl:180
+      [8] svd
+        @ /vapps/rhel9/x86_64/spack/root/opt/spack/linux-rhel9-haswell/gcc-13.2.0/julia-1.12.6-dnqrzweknooxxbvvvkwvlkkveqlce3ln/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/svd.jl:179 [inlined]
+      [9] risks(X::Matrix{Float64}, prior::Vector{Float64}, train::Vector{Int64}, p::Int64, truths::Vector{@NamedTuple{Θ::Matrix{Float64}, Y::Matrix{Float64}, Y_obs::Matrix{Float64}, noise::Float64}}; test::Vector{Int64}, M::Matrix{Float64}, Mt::Matrix{Float64})
+        @ Main ~/AliasingDesign.jl/experiments/ce_pool.jl:118
+     [10] risks
+        @ ~/AliasingDesign.jl/experiments/ce_pool.jl:113 [inlined]
+     [11] macro expansion
+        @ ~/AliasingDesign.jl/experiments/cluster_expansion_paper.jl:109 [inlined]
+     [12] (::var"#70#71"{Vector{Int64}, ReentrantLock, Dict{Int64, Any}, Matrix{Float64}, Matrix{Float64}, Vector{Int64}, Channel{Int64}})(tid::Int64)
+        @ Main ./threadingconstructs.jl:236
+     [13] (::Base.Threads.var"#threading_run##0#threading_run##1"{var"#70#71"{Vector{Int64}, ReentrantLock, Dict{Int64, Any}, Matrix{Float64}, Matrix{Float64}, Vector{Int64}, Channel{Int64}}, Int64})()
+        @ Base.Threads ./threadingconstructs.jl:178
+Stacktrace:
+ [1] threading_run(fun::var"#70#71"{Vector{Int64}, ReentrantLock, Dict{Int64, Any}, Matrix{Float64}, Matrix{Float64}, Vector{Int64}, Channel{Int64}}, static::Bool)
+   @ Base.Threads ./threadingconstructs.jl:199
+ [2] macro expansion
+   @ ./threadingconstructs.jl:216 [inlined]
+ [3] top-level scope
+   @ ~/AliasingDesign.jl/experiments/cluster_expansion_paper.jl:108
+ [4] include(mod::Module, _path::String)
+   @ Base ./Base.jl:306
+ [5] exec_options(opts::Base.JLOptions)
+   @ Base ./client.jl:317
+ [6] _start()
+   @ Base ./client.jl:550
+in expression starting at /home/rhanni3/AliasingDesign.jl/experiments/cluster_expansion_paper.jl:101

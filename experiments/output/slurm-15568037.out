@@ -1,0 +1,35 @@
+job 15568037 on m8-18-4: experiments/benchmark_library.jl with 16 threads (Thu 19 Nov 2026 10:03:34 PM MST)
+BLAS threads: 16
+loaded 2346 structures × 2344 clusters from experiments/data; the true model uses the first 2344
+  DesignProblem construction (closures + QR)        0.3236 s
+  design_matrix only (closures)                     0.0685 s
+p = 100 (N = 2346 pool points, q = 2244)
+  weighted_fit (QR + Qᵀ M_TU)                       0.0975 s
+  fit_cost (risk + noise)                           0.2925 s
+  fit_first_variation (risk + noise)                0.3545 s
+  optimize_weights, 5 iterations                   12.7952 s
+  cost at 600 points (one exchange trial)           0.3298 s
+    of which design_matrices (closures)             0.0105 s
+    of which pinv(M_TM)                             0.0111 s
+  exchange sweep at n = 600, 20 candidates = 12,000 such trials
+p = 300 (N = 2346 pool points, q = 2044)
+  weighted_fit (QR + Qᵀ M_TU)                       0.1232 s
+  fit_cost (risk + noise)                           0.2381 s
+  fit_first_variation (risk + noise)                0.3088 s
+  optimize_weights, 5 iterations                   16.2362 s
+  cost at 600 points (one exchange trial)           0.3887 s
+    of which design_matrices (closures)             0.0090 s
+    of which pinv(M_TM)                             0.0646 s
+  exchange sweep at n = 600, 20 candidates = 12,000 such trials
+p = 1000 (N = 2346 pool points, q = 1344)
+  weighted_fit (QR + Qᵀ M_TU)                       0.2232 s
+  fit_cost (risk + noise)                           0.1605 s
+  fit_first_variation (risk + noise)                0.3205 s
+  optimize_weights, 5 iterations                   11.9235 s
+  cost at 600 points (one exchange trial)           0.6633 s
+    of which design_matrices (closures)             0.0052 s
+    of which pinv(M_TM)                             0.1930 s
+  exchange sweep at n = 600, 20 candidates = 12,000 such trials
+1D: Legendre, 60 basis functions, p = 20, 2,000-point grid, risk on the grid
+  optimize_weights, 200 iterations                  0.0041 s
+  optimize_points, 50 iterations                    0.1735 s

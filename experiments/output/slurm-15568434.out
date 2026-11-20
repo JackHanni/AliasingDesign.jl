@@ -1,0 +1,55 @@
+job 15568434 on m8-18-4: experiments/benchmark_library.jl with 16 threads (Thu 19 Nov 2026 10:23:48 PM MST)
+BLAS threads: 16
+loaded 2346 structures × 2344 clusters from experiments/data; the true model uses the first 2344
+  DesignProblem construction (closures + QR)        0.4680 s
+  design_matrix only (closures)                     0.0466 s
+p = 100 (N = 2346 pool points, q = 2244)
+  weighted_fit (QR + Qᵀ M_TU)                       0.1142 s
+  fit_cost (risk + noise)                           0.0048 s
+  fit_first_variation (risk + noise)                0.3198 s
+  optimize_weights, 5 iterations                    4.9484 s
+  cost at 600 points (one exchange trial)           0.0988 s
+    of which design_matrices (closures)             0.0105 s
+    of which pinv(M_TM)                             0.0102 s
+  exchange sweep at n = 600, 20 candidates = 12,000 such trials
+p = 300 (N = 2346 pool points, q = 2044)
+  weighted_fit (QR + Qᵀ M_TU)                       0.1941 s
+  fit_cost (risk + noise)                           0.0146 s
+  fit_first_variation (risk + noise)                0.2246 s
+  optimize_weights, 5 iterations                    6.4776 s
+  cost at 600 points (one exchange trial)           0.1536 s
+    of which design_matrices (closures)             0.0051 s
+    of which pinv(M_TM)                             0.0456 s
+  exchange sweep at n = 600, 20 candidates = 12,000 such trials
+p = 1000 (N = 2346 pool points, q = 1344)
+  weighted_fit (QR + Qᵀ M_TU)                       0.2351 s
+  fit_cost (risk + noise)                           0.0466 s
+  fit_first_variation (risk + noise)                0.4666 s
+  optimize_weights, 5 iterations                   10.2615 s
+  cost at 600 points (one exchange trial)           0.5349 s
+    of which design_matrices (closures)             0.0117 s
+    of which pinv(M_TM)                             0.2173 s
+  exchange sweep at n = 600, 20 candidates = 12,000 such trials
+1D: Legendre, 60 basis functions, p = 20, 2,000-point grid, risk on the grid
+  optimize_weights, 200 iterations                  0.0042 s
+  optimize_points, 50 iterations                    0.1434 s
+Precompiling packages...
+   2174.0 ms  ✓ AliasingDesign
+  1 dependency successfully precompiled in 4 seconds. 22 already precompiled.
+job 15568434 on m8-18-4: experiments/benchmark_optimizer.jl with 16 threads (Thu 19 Nov 2026 10:25:26 PM MST)
+loaded 2346 structures × 2344 clusters from experiments/data; the true model uses the first 2344
+  JuCE pool, p = 100, 300 iterations grow 1.0: cost 1.194663e+00  residual 4.72e-08  iterations   300  converged false   102.34 s
+  JuCE pool, p = 100, 300 iterations grow 1.5: cost 1.194663e+00  residual 3.68e-08  iterations   300  converged false   118.59 s
+  JuCE pool, p = 100, 300 iterations grow 2.0: cost 1.194663e+00  residual 1.11e-07  iterations    57  converged false   163.02 s
+  JuCE pool, p = 300, 300 iterations grow 1.0: cost 6.492050e-01  residual 3.84e-08  iterations   300  converged false   149.32 s
+  JuCE pool, p = 300, 300 iterations grow 1.5: cost 6.492050e-01  residual 1.47e-07  iterations   158  converged false   251.65 s
+  JuCE pool, p = 300, 300 iterations grow 2.0: cost 6.492050e-01  residual 2.21e-07  iterations   300  converged false   163.35 s
+  Legendre risk, p = 10 of 30        grow 1.0: cost 2.128407e-03  residual 1.25e-17  iterations     0  converged true      0.02 s
+  Legendre risk, p = 10 of 30        grow 1.5: cost 2.128407e-03  residual 1.25e-17  iterations     0  converged true      0.00 s
+  Legendre risk, p = 10 of 30        grow 2.0: cost 2.128407e-03  residual 1.25e-17  iterations     0  converged true      0.00 s
+  Legendre aliasing, p = 10 of 30    grow 1.0: cost 1.433380e-31  residual 7.71e-17  iterations 20000  converged false    14.79 s
+  Legendre aliasing, p = 10 of 30    grow 1.5: cost 9.051600e-32  residual 7.42e-17  iterations  6974  converged false     7.18 s
+  Legendre aliasing, p = 10 of 30    grow 2.0: cost 2.675348e-32  residual 9.81e-17  iterations  6918  converged false     8.00 s
+  Legendre risk + noise, p = 20 of 60 grow 1.0: cost 2.397165e-03  residual 4.13e-08  iterations 20000  converged false    39.90 s
+  Legendre risk + noise, p = 20 of 60 grow 1.5: cost 2.397165e-03  residual 1.15e-10  iterations  8747  converged false    22.89 s
+  Legendre risk + noise, p = 20 of 60 grow 2.0: cost 2.397165e-03  residual 7.57e-10  iterations  6351  converged false    19.79 s

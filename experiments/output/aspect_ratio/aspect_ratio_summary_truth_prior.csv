@@ -1,0 +1,131 @@
+design,ratio,quantity,points,mean,std,min,max
+random,0.1,expected risk,20,1.66675,0.139459,1.48558,1.8624
+random,0.1,held-out risk (truth: prior),20,1.66792,0.145287,1.46903,1.85586
+random,0.1,expected aliasing,20,3.88077,1.29912,2.49299,6.14304
+random,0.1,parameter aliasing (truth: prior),20,3.82577,1.32302,2.25596,6.12275
+random,0.1,aliasing norm ‖A‖₂ (as in the paper),20,7.96275,0.904226,6.56721,10.2273
+random,0.25,expected risk,20,1.84887,0.152063,1.67613,2.11219
+random,0.25,held-out risk (truth: prior),20,1.84805,0.158749,1.64723,2.11955
+random,0.25,expected aliasing,20,13.2229,5.91751,5.10948,21.8882
+random,0.25,parameter aliasing (truth: prior),20,12.9868,5.68149,5.39529,22.0497
+random,0.25,aliasing norm ‖A‖₂ (as in the paper),20,12.3087,1.36099,9.57105,14.3783
+random,0.5,expected risk,20,2.40276,0.487885,1.67537,3.02548
+random,0.5,held-out risk (truth: prior),20,2.39876,0.49359,1.66214,3.04578
+random,0.5,expected aliasing,20,42.4121,12.3149,22.5708,63.7241
+random,0.5,parameter aliasing (truth: prior),20,42.3178,12.5111,22.2133,63.479
+random,0.5,aliasing norm ‖A‖₂ (as in the paper),20,22.5545,3.84415,16.5699,29.5734
+random,0.75,expected risk,20,5.17771,1.66318,3.31849,8.26363
+random,0.75,held-out risk (truth: prior),20,5.08481,1.62558,3.22082,8.08305
+random,0.75,expected aliasing,20,157.576,58.7595,83.9055,311.144
+random,0.75,parameter aliasing (truth: prior),20,152.342,54.6686,86.8542,300.07
+random,0.75,aliasing norm ‖A‖₂ (as in the paper),20,52.7921,19.1223,34.4787,100.423
+random,0.9,expected risk,20,18.2832,7.27836,9.91797,35.8588
+random,0.9,held-out risk (truth: prior),20,17.9644,6.92434,9.89282,31.1776
+random,0.9,expected aliasing,20,755.014,310.782,413.877,1300.42
+random,0.9,parameter aliasing (truth: prior),20,743.994,318.861,410.913,1477.39
+random,0.9,aliasing norm ‖A‖₂ (as in the paper),20,159.242,64.3327,85.9873,309.003
+random,0.95,expected risk,20,42.6823,39.9273,20.6858,206.115
+random,0.95,held-out risk (truth: prior),20,41.1483,39.5919,20.5586,204.62
+random,0.95,expected aliasing,20,1846.21,1476.45,882.843,7744.41
+random,0.95,parameter aliasing (truth: prior),20,1792.1,1499.83,823.336,7860.5
+random,0.95,aliasing norm ‖A‖₂ (as in the paper),20,280.731,160.099,166.119,890.104
+random,1,expected risk,20,36074.8,95513.4,205.731,348357
+random,1,held-out risk (truth: prior),20,35964.4,94557.2,205.257,340988
+random,1,expected aliasing,20,2.28591e+06,6.33112e+06,6399.51,2.42675e+07
+random,1,parameter aliasing (truth: prior),20,2.28072e+06,6.25562e+06,6736.43,2.3775e+07
+random,1,aliasing norm ‖A‖₂ (as in the paper),20,10254.3,17601.3,828.204,70817.6
+random,1.05,expected risk,20,45.1128,13.3263,27.485,69.7075
+random,1.05,held-out risk (truth: prior),20,45.4633,16.1857,23.7952,79.0107
+random,1.05,expected aliasing,20,1750.69,680.671,737.311,3479.43
+random,1.05,parameter aliasing (truth: prior),20,1759.18,745.27,577.444,3574.8
+random,1.05,aliasing norm ‖A‖₂ (as in the paper),20,334.103,116.856,206.594,624.267
+random,1.1,expected risk,20,77.0599,221.343,13.1195,1015
+random,1.1,held-out risk (truth: prior),20,95.8075,301.732,12.9699,1375.79
+random,1.1,expected aliasing,20,2701.3,8050.42,438.917,36830.6
+random,1.1,parameter aliasing (truth: prior),20,3399.77,11080,449.982,50417
+random,1.1,aliasing norm ‖A‖₂ (as in the paper),20,383.384,735.907,116.806,3468.13
+random,1.25,expected risk,20,7.23402,3.268,4.17252,16.0336
+random,1.25,held-out risk (truth: prior),20,7.14388,3.22076,4.15421,16.0361
+random,1.25,expected aliasing,20,150.51,41.7024,115.897,278.842
+random,1.25,parameter aliasing (truth: prior),20,148.874,41.8255,115.39,281.92
+random,1.25,aliasing norm ‖A‖₂ (as in the paper),20,63.1896,21.2563,38.256,112.161
+random,1.5,expected risk,20,4.76344,2.73309,2.06241,12.4618
+random,1.5,held-out risk (truth: prior),20,4.67774,2.54503,2.05985,11.0857
+random,1.5,expected aliasing,20,74.3989,54.5165,37.1768,281.22
+random,1.5,parameter aliasing (truth: prior),20,72.2049,48.2944,37.0524,249.163
+random,1.5,aliasing norm ‖A‖₂ (as in the paper),20,47.1426,59.5455,19.4383,294.98
+random,2,expected risk,20,2.13137,0.755804,1.2842,3.35321
+random,2,held-out risk (truth: prior),20,2.1138,0.749073,1.28594,3.42758
+random,2,expected aliasing,20,17.6579,4.5425,12.2429,26.1476
+random,2,parameter aliasing (truth: prior),20,17.5467,4.57335,12.3093,27.2201
+random,2,aliasing norm ‖A‖₂ (as in the paper),20,14.8045,4.57959,8.93771,26.3796
+random,3,expected risk,20,1.45922,0.602114,0.669574,2.39729
+random,3,held-out risk (truth: prior),20,1.44925,0.598679,0.673838,2.43525
+random,3,expected aliasing,20,5.80343,3.12489,1.44119,11.6373
+random,3,parameter aliasing (truth: prior),20,5.78144,3.14576,1.46409,12.2446
+random,3,aliasing norm ‖A‖₂ (as in the paper),20,8.10677,5.44033,3.49847,28.0212
+natural,0.1,expected risk,4,1.71215,0.176532,1.49293,1.88209
+natural,0.1,held-out risk (truth: prior),4,1.70653,0.17997,1.48552,1.88514
+natural,0.1,expected aliasing,4,6.43841,1.75853,4.34451,8.36849
+natural,0.1,parameter aliasing (truth: prior),4,6.29581,1.97576,3.93805,8.52971
+natural,0.1,aliasing norm ‖A‖₂ (as in the paper),4,11.7986,2.18665,9.14317,14.1623
+natural,0.25,expected risk,4,2.97762,0.846392,2.19684,4.17907
+natural,0.25,held-out risk (truth: prior),4,2.87176,0.667125,2.19653,3.78835
+natural,0.25,expected aliasing,4,54.6435,53.7015,15.1493,130.56
+natural,0.25,parameter aliasing (truth: prior),4,51.9669,47.3311,13.9127,116.134
+natural,0.25,aliasing norm ‖A‖₂ (as in the paper),4,40.6329,23.3557,20.7475,71.2617
+natural,0.5,expected risk,4,6.66503,2.90138,2.47804,8.98211
+natural,0.5,held-out risk (truth: prior),4,6.66727,2.82474,2.44143,8.22321
+natural,0.5,expected aliasing,4,166.892,118.618,46.9012,325.876
+natural,0.5,parameter aliasing (truth: prior),4,170.288,124.666,44.901,332.614
+natural,0.5,aliasing norm ‖A‖₂ (as in the paper),4,86.1953,41.0486,31.4909,128.707
+natural,0.75,expected risk,4,123.405,200.505,2.91557,421.542
+natural,0.75,held-out risk (truth: prior),4,137.542,233.676,2.80244,486.383
+natural,0.75,expected aliasing,4,4204.86,7461.97,32.2745,15373.1
+natural,0.75,parameter aliasing (truth: prior),4,4979.75,9104.27,29.854,18620.6
+natural,0.75,aliasing norm ‖A‖₂ (as in the paper),4,479.568,682.691,24.3704,1485.38
+natural,0.9,expected risk,4,16.9749,16.8026,2.91653,40.2833
+natural,0.9,held-out risk (truth: prior),4,14.3073,13.8552,2.76676,33.8074
+natural,0.9,expected aliasing,4,313.143,262.751,33.4556,650.426
+natural,0.9,parameter aliasing (truth: prior),4,267.208,220.101,31.0526,556.373
+natural,0.9,aliasing norm ‖A‖₂ (as in the paper),4,149.354,110.022,29.2629,258.927
+natural,0.95,expected risk,4,15.9355,15.2502,3.82789,37.4766
+natural,0.95,held-out risk (truth: prior),4,13.463,12.4519,3.5538,31.2178
+natural,0.95,expected aliasing,4,279.384,215.987,61.1634,572.211
+natural,0.95,parameter aliasing (truth: prior),4,240.1,178.865,53.0828,481.834
+natural,0.95,aliasing norm ‖A‖₂ (as in the paper),4,144.01,87.1372,58.0494,241.713
+natural,1,expected risk,4,14.6475,14.8785,4.65774,36.6228
+natural,1,held-out risk (truth: prior),4,12.5784,12.0728,4.353,30.4184
+natural,1,expected aliasing,4,254.243,201.15,83.4637,545.684
+natural,1,parameter aliasing (truth: prior),4,222.058,165.389,74.4816,458.992
+natural,1,aliasing norm ‖A‖₂ (as in the paper),4,132.607,76.998,68.0371,238.615
+natural,1.05,expected risk,4,13.9,14.418,5.41552,35.453
+natural,1.05,held-out risk (truth: prior),4,12.1063,11.606,4.86336,29.4068
+natural,1.05,expected aliasing,4,244.607,183.897,103.545,514.654
+natural,1.05,parameter aliasing (truth: prior),4,217.747,147.025,94.674,430.796
+natural,1.05,aliasing norm ‖A‖₂ (as in the paper),4,118.837,78.7603,59.0937,234.541
+natural,1.1,expected risk,4,15.6672,14.3808,4.59755,36.0102
+natural,1.1,held-out risk (truth: prior),4,13.8056,11.7523,4.11985,29.8798
+natural,1.1,expected aliasing,4,288.817,188.76,87.6046,520.879
+natural,1.1,parameter aliasing (truth: prior),4,255.539,155.491,80.1448,434.567
+natural,1.1,aliasing norm ‖A‖₂ (as in the paper),4,131.58,79.0258,56.8285,232.614
+natural,1.25,expected risk,4,106.831,181.271,4.25339,378.083
+natural,1.25,held-out risk (truth: prior),4,91.1054,154.992,3.81215,323.101
+natural,1.25,expected aliasing,4,2124.01,3625.26,79.4141,7555.99
+natural,1.25,parameter aliasing (truth: prior),4,1838.82,3147.19,72.0739,6555.01
+natural,1.25,aliasing norm ‖A‖₂ (as in the paper),4,412.323,516.955,54.9335,1179.85
+natural,1.5,expected risk,4,26.3599,30.3401,1.78796,66.4575
+natural,1.5,held-out risk (truth: prior),4,27.8512,36.0461,1.69698,79.0599
+natural,1.5,expected aliasing,4,377.355,430.07,27.5181,954.12
+natural,1.5,parameter aliasing (truth: prior),4,403.542,522.505,25.9509,1152.56
+natural,1.5,aliasing norm ‖A‖₂ (as in the paper),4,166.791,153.614,31.732,357.373
+natural,2,expected risk,4,9.8223,9.30432,1.31299,22.7126
+natural,2,held-out risk (truth: prior),4,10.089,10.3427,1.26322,24.755
+natural,2,expected aliasing,4,117.173,109.997,12.8292,270.255
+natural,2,parameter aliasing (truth: prior),4,121.986,126.202,12.3227,301.824
+natural,2,aliasing norm ‖A‖₂ (as in the paper),4,78.7161,53.9987,15.4302,144.287
+natural,3,expected risk,4,6.88522,7.83799,1.10191,18.4634
+natural,3,held-out risk (truth: prior),4,7.31285,8.77615,1.17561,20.3383
+natural,3,expected aliasing,4,59.8684,84.5454,6.33185,185.955
+natural,3,parameter aliasing (truth: prior),4,65.0386,95.5119,6.83773,207.759
+natural,3,aliasing norm ‖A‖₂ (as in the paper),4,56.5458,48.5082,26.6547,128.895

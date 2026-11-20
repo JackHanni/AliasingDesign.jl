@@ -1,0 +1,69 @@
+job 15578616 on m12-1-4: experiments/ce_budget.jl with 32 threads (Fri 20 Nov 2026 09:41:54 AM MST)
+loaded 2346 structures × 2344 clusters from experiments/data; the true model uses the first 2344
+floors: p = 50: 1.333, p = 100: 1.195, p = 300: 0.6492
+  greedy path for p = 50 up to n = 200: 0.2 min
+  greedy path for p = 100 up to n = 400: 1.1 min
+  greedy path for p = 300 up to n = 1200: 27.1 min
+optimizing 21 budgets on 32 threads
+  p =   50, n =    50: relaxed 1.333, rounded 2090, greedy 6.912, exchanged 5.538 (1 swaps, 0.8 min)
+  p =   50, n =    55: relaxed 1.333, rounded 2000, greedy 4.084, exchanged 3.832 (5 swaps, 1.9 min)
+  p =   50, n =    62: relaxed 1.333, rounded 484.2, greedy 3.177, exchanged 2.838 (16 swaps, 0.9 min)
+  p =   50, n =    75: relaxed 1.333, rounded 597.5, greedy 2.462, exchanged 2.296 (22 swaps, 1.9 min)
+  p =   50, n =   100: relaxed 1.333, rounded 12.39, greedy 1.968, exchanged 1.908 (27 swaps, 0.8 min)
+  p =   50, n =   150: relaxed 1.333, rounded 3.361, greedy 1.653, exchanged 1.635 (19 swaps, 0.7 min)
+  p =   50, n =   200: relaxed 1.333, rounded 2.308, greedy 1.534, exchanged 1.525 (22 swaps, 0.7 min)
+  p =  100, n =   100: relaxed 1.195, rounded 6.559, greedy 7.84, exchanged 6.577 (7 swaps, 1.0 min)
+  p =  100, n =   110: relaxed 1.195, rounded 5.404, greedy 4.137, exchanged 3.799 (14 swaps, 0.9 min)
+  p =  100, n =   125: relaxed 1.195, rounded 5.163, greedy 2.952, exchanged 2.755 (16 swaps, 2.4 min)
+  p =  100, n =   150: relaxed 1.195, rounded 11.51, greedy 2.213, exchanged 2.093 (24 swaps, 1.1 min)
+  p =  100, n =   200: relaxed 1.195, rounded 12.11, greedy 1.714, exchanged 1.691 (15 swaps, 2.7 min)
+  p =  100, n =   300: relaxed 1.195, rounded 1.907, greedy 1.436, exchanged 1.428 (30 swaps, 2.9 min)
+  p =  100, n =   400: relaxed 1.195, rounded 1.604, greedy 1.34, exchanged 1.336 (28 swaps, 1.2 min)
+  p =  300, n =   300: relaxed 0.6492, rounded 1.291e+04, greedy 9.982, exchanged 8.307 (7 swaps, 2.6 min)
+  p =  300, n =   330: relaxed 0.6492, rounded 2.55e+04, greedy 2.989, exchanged 2.76 (28 swaps, 6.9 min)
+  p =  300, n =   375: relaxed 0.6492, rounded 14.12, greedy 1.804, exchanged 1.754 (30 swaps, 7.9 min)
+  p =  300, n =   450: relaxed 0.6492, rounded 2.929, greedy 1.251, exchanged 1.228 (30 swaps, 9.1 min)
+  p =  300, n =   600: relaxed 0.6492, rounded 1.286, greedy 0.9231, exchanged 0.9161 (30 swaps, 13.8 min)
+  p =  300, n =   900: relaxed 0.6492, rounded 0.8325, greedy 0.7521, exchanged 0.7493 (30 swaps, 15.5 min)
+  p =  300, n =  1200: relaxed 0.6492, rounded 0.7129, greedy 0.6992, exchanged 0.698 (30 swaps, 22.4 min)
+  wrote output/ce_budget/rounding.csv
+  wrote output/ce_budget/training_sets.csv
+scoring 1134 training sets
+Precompiling packages...
+   2046.3 ms  ✓ AliasingDesign
+  1 dependency successfully precompiled in 5 seconds. 22 already precompiled.
+  wrote output/ce_budget/budget.csv
+  wrote output/ce_budget/budget_truth_prior.png
+  wrote output/ce_budget/savings_truth_prior.png
+  wrote output/ce_budget/budget_truth_unit.png
+  wrote output/ce_budget/savings_truth_unit.png
+  wrote output/ce_budget/rounding.png
+job 15578616 on m12-1-4: experiments/sloppy.jl with 32 threads (Fri 20 Nov 2026 11:49:47 AM MST)
+
+extra variance 0: 8 modeled rates, 0 unmodeled; Fisher eigenvalues 8.61e-01 … 6.05e-07 (ratio 1.4e+06); floor 0
+  n =   24: relaxed 2.272e-07, n largest 2.325e-07, quantile 2.332e-07, exchanged 2.325e-07 (0 swaps)
+  n =   10: relaxed 5.451e-07, n largest 0.0721, quantile 0.09781, exchanged 6.203e-07 (3 swaps)
+  n =   12: relaxed 4.542e-07, n largest 0.007679, quantile 0.02345, exchanged 5.038e-07 (4 swaps)
+  n =   40: relaxed 1.363e-07, n largest 1.368e-07, quantile 1.369e-07, exchanged 1.368e-07 (0 swaps)
+  n =   64: relaxed 8.534e-08, n largest 8.561e-08, quantile 8.561e-08, exchanged 8.561e-08 (0 swaps)
+  n =   16: relaxed 3.407e-07, n largest 0.006449, quantile 0.0004522, exchanged 3.551e-07 (2 swaps)
+  n =    8: relaxed 6.813e-07, n largest 0.4417, quantile 2.354e+04, exchanged 8.863e-07 (4 swaps)
+  wrote output/sloppy/training_times_extra_0.csv
+  wrote output/sloppy/budget_extra_0.csv
+  wrote output/sloppy/budget_extra_0.png
+  wrote output/sloppy/directions_extra_0.csv
+  wrote output/sloppy/directions_extra_0.png
+
+extra variance 0.01: 8 modeled rates, 7 unmodeled; Fisher eigenvalues 8.61e-01 … 6.05e-07 (ratio 1.4e+06); floor 2.66e-09
+  n =   10: relaxed 5.504e-07, n largest 0.05436, quantile 0.08557, exchanged 6.254e-07 (3 swaps)
+  n =   40: relaxed 1.413e-07, n largest 1.419e-07, quantile 1.419e-07, exchanged 1.419e-07 (0 swaps)
+  n =    8: relaxed 6.866e-07, n largest 607.6, quantile 2.905e+04, exchanged 9.057e-07 (5 swaps)
+  n =   64: relaxed 9.01e-08, n largest 9.046e-08, quantile 9.043e-08, exchanged 9.043e-08 (1 swaps)
+  n =   12: relaxed 4.595e-07, n largest 0.008992, quantile 0.03266, exchanged 5.089e-07 (5 swaps)
+  n =   24: relaxed 2.323e-07, n largest 2.407e-07, quantile 2.384e-07, exchanged 2.375e-07 (2 swaps)
+  n =   16: relaxed 3.459e-07, n largest 0.01047, quantile 0.0006235, exchanged 3.603e-07 (2 swaps)
+  wrote output/sloppy/training_times_extra_0.01.csv
+  wrote output/sloppy/budget_extra_0.01.csv
+  wrote output/sloppy/budget_extra_0.01.png
+  wrote output/sloppy/directions_extra_0.01.csv
+  wrote output/sloppy/directions_extra_0.01.png

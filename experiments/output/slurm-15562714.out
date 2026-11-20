@@ -1,0 +1,2 @@
+job 15562714 on m12-1-1: experiments/cluster_expansion_paper.jl with 32 threads (Thu 19 Nov 2026 05:38:59 PM MST)
+[2026-11-19T20:09:15.019] error: *** JOB 15562714 ON m12-1-1 CANCELLED AT 2026-11-19T20:09:15 DUE TO TIME LIMIT ***

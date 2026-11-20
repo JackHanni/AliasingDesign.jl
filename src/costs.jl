@@ -291,7 +291,7 @@ end
 
 """
     optimize_weights(c, prob, points, weights; maxiter = 10_000, rtol = 1e-8, η = 1.0, cap = nothing,
-                     step = :grow, grow = 1.5)
+                     step = :bb, grow = 1.5)
         -> (; weights, cost, λ, residual, iterations, converged)
 
 Minimize the cost `c` over weights on `points` with the Fisher–Rao flow (exponentiated
@@ -314,9 +314,11 @@ step, `h` changes by the rule `step`:
 - `:clean`: `h *= grow` only after a step accepted at the first try (none refused this iteration).
 - `:ratio` (trust-region style): compare the decrease with the first-order prediction
   `⟨g, w − w_trial⟩`; `h *= 2` when their ratio is above 3/4, `h /= 2` when below 1/4.
-- `:bb` (Barzilai–Borwein): `h = ⟨s, W⁻¹s⟩ / ⟨s, y⟩` from the last step `s = Δw` and the change in
+- `:bb` (Barzilai–Borwein, the default): `h = ⟨s, W⁻¹s⟩ / ⟨s, y⟩` from the last step `s = Δw` and the change in
   the first variation `y = Δg`, in the Fisher–Rao metric `W⁻¹ = diag(1/w)`; kept within a factor
   of 10 of the last step; `h *= grow` when `⟨s, y⟩ ≤ 0`. Still monotone (refused steps halve).
+  Fastest by far in our benchmarks (`experiments/benchmark_optimizer.jl`): 17× fewer seconds on
+  the cluster-expansion pool at p = 100, 3–9× on 1D Legendre problems, same costs.
 
 Returns a named tuple:
 - `weights`: the final weights.
@@ -329,7 +331,7 @@ Returns a named tuple:
 - `converged`: whether `residual ≤ rtol * max(maximum(abs, g), cost)` was reached within `maxiter`.
 """
 function optimize_weights(c::DesignCost, prob::DesignProblem, points, weights;
-                          maxiter = 10_000, rtol = 1e-8, η = 1.0, cap = nothing, step = :grow,
+                          maxiter = 10_000, rtol = 1e-8, η = 1.0, cap = nothing, step = :bb,
                           grow = 1.5)
     step in (:grow, :clean, :ratio, :bb) ||
         throw(ArgumentError("step must be :grow, :clean, :ratio or :bb, got $(repr(step))"))

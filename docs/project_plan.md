@@ -699,12 +699,16 @@ scripts are in [`experiments/`](../experiments/README.md).
   (`weighted_fit`), never from forming $G_{\mathcal{MM}}$, which would square the condition number.
   `optimize_weights` builds the design matrices once per run and reuses each accepted step's fit
   for the next first variation; `WithNoise` shares one fit between its two terms.
-- *Fisher–Rao step size.* The step starts at $\eta/\max|g - \lambda|$, halves when a step would
-  raise the cost, and grows by `grow` = 1.5 after each accepted step. The run stops when 50
-  halvings in a row fail (a rounding-level plateau): before, it halved to $10^{-300}$, about 1,000
-  refits for nothing. Compared with a fixed step (`grow = 1`), on the cluster-expansion pool
-  (300 iterations, same final cost): 84 s vs. 120 s at $p = 300$, 118 s vs. 102 s at $p = 100$; on
-  1D Legendre problems run to 20,000 iterations, about half the time with a smaller KKT residual.
+- *Fisher–Rao step size.* The first step is $\eta/\max|g - \lambda|$; a step that would raise the
+  cost is halved, and the run stops when 50 halvings in a row fail (a rounding-level plateau; it
+  used to halve to $10^{-300}$, about 1,000 refits for nothing). After an accepted step, the
+  default rule (`step = :bb`) sets the next step by Barzilai–Borwein in the Fisher–Rao metric,
+  $h = \langle s, W^{-1}s\rangle / \langle s, y\rangle$ with $s = \Delta w$, $y = \Delta g$,
+  $W = \operatorname{diag}(w)$, kept within a factor of 10 of the last step. Compared with a fixed
+  step and three other rules (grow ×1.5 after each accepted step, grow only after a first-try
+  success, trust-region ratio test), on the same final costs: cluster-expansion pool at $p = 100$,
+  18 s (converged in 39 iterations) vs. 308 s fixed and 343–376 s for the others; at $p = 300$, 66 s
+  vs. 92–479 s; 1D Legendre problems 3–9× faster than a fixed step.
 - *Risk operator by blocks.* $M_{\mathcal P}E_\theta$ is computed as
   $[M_{\mathcal{PM}}(I - B)\ \ M_{\mathcal{PU}} - M_{\mathcal{PM}}A]$, without forming the
   $(p+q)\times(p+q)$ matrix $E_\theta$.

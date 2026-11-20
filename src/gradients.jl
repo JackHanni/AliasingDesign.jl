@@ -66,7 +66,7 @@ function gradient_coefficients(c::Risk, prob::DesignProblem, points, M, N, P)
     (M_PM, _) = prediction_matrices(prob)    # compressed R_PM: same inner products as M_PM
     p = prob.p
     s = 1 / sqrt(prob.n_P)
-    K = get_K(c.norm, cost_op(c, prob, points))
+    K = risk_K(c.norm, prob, I - P * M, P * N)   # top rows: R_PM is zero below them
     D = prior_sqrt(prob)
     C_B = -s * M_PM' * K[:, 1:p] * D[1:p, 1:p]
     C_A = -s * M_PM' * K[:, p+1:end] * D[p+1:end, p+1:end]

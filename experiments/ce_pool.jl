@@ -103,18 +103,46 @@ the data-insufficiency part, so this isolates aliasing for any n and p):
 - `aliasing_norm`: the GAD paper's aliasing norm ‖A‖₂ = σ_max(A), unweighted and label-free, for
   comparison with the paper's figures (see the plan, *Expected aliasing, and why not the paper's ‖A‖*).
 """
-function risks(X, prior, train, p, truths)
-    test = setdiff(axes(X, 1), train)
-    M, Mt = X[train, :], X[test, :]
-    P = pinv(M[:, 1:p])
-    A = P * M[:, p+1:end]
-    D = sqrt.(prior)
-    E_M = (Mt[:, 1:p] * (I - P * M[:, 1:p])) .* D[1:p]'
-    E_U = (Mt[:, p+1:end] .- Mt[:, 1:p] * A) .* D[p+1:end]'
-    expected = (sum(abs2, E_M) + sum(abs2, E_U) + truths.noise^2 * sum(abs2, Mt[:, 1:p] * P)) / length(test)
-    θ̂ = P * truths.Y_obs[train, :]
-    heldout = mean(abs2, Mt[:, 1:p] * θ̂ .- truths.Y[test, :])
-    expected_alias = sum(abs2, A .* D[p+1:end]') + truths.noise^2 * sum(abs2, P)
-    param_alias = sum(abs2, θ̂ .- (P * M[:, 1:p]) * truths.Θ[1:p, :]) / size(θ̂, 2)
-    return (; expected, heldout, expected_alias, param_alias, aliasing_norm = opnorm(A, 2))
+
+# Every quantity comes from one thin SVD M_TM = U S Vᵀ (rank r): M⁺ = V S⁻¹ Uᵀ and B = V Vᵀ, and
+# since V has orthonormal columns, ‖A‖ = ‖C‖ for any unitarily invariant norm with C = S⁻¹ Uᵀ M_TU
+# (r × q, so ‖A‖₂ needs only the singular values of a matrix with at most n rows). `truths` is one
+# set of synthetic truths or a vector of them (the design-only quantities are computed once); with a
+# vector, `heldout` and `param_alias` are vectors too. Pass `M = X[train, :]` and `Mt = X[test, :]` to
+# reuse them across p.
+function risks(X, prior, train, p, truths; test = setdiff(axes(X, 1), train), M = X[train, :],
+               Mt = X[test, :])
+    many = truths isa AbstractVector
+    sets = many ? truths : [truths]
+    M1, M2, Mt1, Mt2 = M[:, 1:p], M[:, p+1:end], Mt[:, 1:p], Mt[:, p+1:end]
+    F = try
+        svd(M1)                                               # divide and conquer (gesdd): fast
+    catch e
+        e isa LAPACKException || rethrow()
+        svd(M1; alg = LinearAlgebra.QRIteration())            # gesvd: slower, more robust
+    end
+    r = count(>(F.S[1] * eps() * minimum(size(M1))), F.S)      # pinv's default tolerance
+    U, s, V = F.U[:, 1:r], F.S[1:r], F.V[:, 1:r]
+    D_M, D_U = sqrt.(prior[1:p]), sqrt.(prior[p+1:end])
+    W = Mt1 * V                                               # n_test × r
+    G = (W ./ s') * U'                                        # M_test,M M⁺, n_test × n
+    C = (U' * M2) ./ s                                        # A = V C
+    n_test = size(Mt, 1)
+    E_M = sum(abs2, (Mt1 .- W * V') .* D_M')                  # M_test,M (I − B) Σ_M^{1/2}
+    E_U = sum(abs2, (Mt2 .- G * M2) .* D_U')                  # (M_test,U − M_test,M A) Σ_U^{1/2}
+    P_F2 = sum(abs2, inv.(s))                                 # ‖M⁺‖²_F
+    A_DU = sum(abs2, C .* D_U')                               # ‖A Σ_U^{1/2}‖²_F
+    noise = first(sets).noise
+    all(t -> t.noise == noise, sets) || throw(ArgumentError("truth sets must share the noise level"))
+    expected = (E_M + E_U + noise^2 * sum(abs2, G)) / n_test
+    expected_alias = A_DU + noise^2 * P_F2
+    heldout, param_alias = Float64[], Float64[]
+    for t in sets
+        Z = (U' * t.Y_obs[train, :]) ./ s           # Vᵀ θ̂ = S⁻¹ Uᵀ y
+        push!(heldout, mean(abs2, W * Z .- t.Y[test, :]))
+        push!(param_alias, sum(abs2, Z .- V' * t.Θ[1:p, :]) / size(Z, 2))   # ‖V(Z − Vᵀθ_M)‖ = ‖Z − Vᵀθ_M‖
+    end
+    aliasing_norm = isempty(C) ? 0.0 : first(svdvals(C))
+    return (; expected, heldout = many ? heldout : only(heldout), expected_alias,
+            param_alias = many ? param_alias : only(param_alias), aliasing_norm)
 end

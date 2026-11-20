@@ -74,8 +74,10 @@ end
 write_table(joinpath(OUT, "aspect_ratio_summary_truth_$(TRUTH).csv"),
             ["design", "ratio", "quantity", "points", "mean", "std", "min", "max"], summary)
 
+# Legend inside the top panel (an outside legend would shrink that panel only and misalign the
+# x axes); a left margin keeps the long y labels on the canvas.
 fig = plot(layout = (5, 1), size = (900, 1700), xlabel = "aspect ratio p/n", xscale = :log10,
-           yscale = :log10, legend = :outerright, link = :x)
+           yscale = :log10, legend = :topleft, link = :x, left_margin = 12Plots.mm)
 colors = Dict(n => i for (i, n) in enumerate(NS))
 for (k, (col, label)) in enumerate(QUANTITIES)
     for n in NS

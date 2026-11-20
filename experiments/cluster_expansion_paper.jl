@@ -21,15 +21,16 @@
 #              τ = 1e-6/N_TRAIN) on the pool at that p, then top-n rounding. No exchange step: at
 #              n = 600 each exchange sweep would try ~6,000 swaps, each a full cost evaluation.
 #
-# Cost (rough, 8 threads): each risk evaluation is a pseudoinverse of a 600 × p matrix plus
-# products of size ~K·p·(K − p), up to ~0.5 s on one core. The default p grid (~400 values, dense
-# near p = N_TRAIN) × 13 training sets is ~5,000 evaluations, ~10–15 min; P_GRID=all (2,343 values)
-# is ~30,000 evaluations, ~1–1.5 h. (Each evaluation computes both risks and the aliasing.) Each optimized design adds a few minutes (POOL_MAXITER
-# Fisher–Rao iterations at ~0.5 s each).
+# Cost: each (training set, p) evaluation is one thin SVD of the 600 × p training block plus
+# products of size ~n_test·p·n, and serves every truth kind at once. The default p grid (116 values)
+# × 13 training sets took ~20 min on 16 cores (before the single-SVD rewrite of `risks`); P_GRID=all
+# (2,343 values, ~30,000 evaluations) needs several hours on 32 cores. Each training set's results
+# are checkpointed to risk_vs_p_partial.csv as it finishes. Each optimized design adds a few minutes
+# (POOL_MAXITER Fisher–Rao iterations).
 #
 # Settings (environment variables): N_TRAIN (600), N_RANDOM (10), P_TARGETS ("100,300"),
-# POOL_MAXITER (300; 2000 with FULL=1), P_GRID ("default" or "all"), N_TRUTHS (50), TRUTH ("prior"
-# or "unit"), NOISE (1e-3, the noise standard deviation per energy).
+# POOL_MAXITER (300; 2000 with FULL=1), P_GRID ("default", "all", or a list such as "5,50,100"), N_TRUTHS (50), TRUTH ("prior",
+# "unit", or both: "prior,unit", the default; one CSV and figure per truth kind), NOISE (1e-3, the noise standard deviation per energy).
 
 include("common.jl")
 include("ce_pool.jl")
@@ -40,7 +41,7 @@ const N_RANDOM = parse(Int, get(ENV, "N_RANDOM", "10"))
 const P_TARGETS = parse.(Int, split(get(ENV, "P_TARGETS", "100,300"), ","))
 const POOL_MAXITER = parse(Int, get(ENV, "POOL_MAXITER", FULL ? "2000" : "300"))
 const N_TRUTHS = parse(Int, get(ENV, "N_TRUTHS", "50"))
-const TRUTH = Symbol(get(ENV, "TRUTH", "prior"))
+const TRUTH_KINDS = Symbol.(split(get(ENV, "TRUTH", "prior,unit"), ","))
 const NOISE = parse(Float64, get(ENV, "NOISE", "1e-3"))
 
 const X, SIZES, SOURCE = load_pool(typemax(Int))    # the true model: every cluster in the pool
@@ -48,13 +49,15 @@ const K = size(X, 2)
 const POOL = collect(1:size(X, 1))
 const PRIOR = cluster_prior(SIZES)
 const BASE = DesignProblem(pool_basis(X); p = 1, prior = PRIOR, predict = POOL)  # prediction QR, once
-const TRUTHS = synthetic_truths(X, PRIOR; n_truths = N_TRUTHS, noise = NOISE, kind = TRUTH)
+const TRUTHS = [synthetic_truths(X, PRIOR; n_truths = N_TRUTHS, noise = NOISE, kind) for kind in TRUTH_KINDS]
 
 N_TRAIN <= length(POOL) || error("N_TRAIN = $N_TRAIN exceeds the pool size $(length(POOL))")
 
 # Dense around the interpolation threshold p = N_TRAIN, coarser elsewhere.
 const P_GRID = if get(ENV, "P_GRID", "default") == "all"
     collect(1:K-1)
+elseif get(ENV, "P_GRID", "default") != "default"                 # an explicit list, e.g. "5,50,100"
+    sort(unique(parse.(Int, split(ENV["P_GRID"], ","))))
 else
     n = N_TRAIN
     grid = [1:20; 25:25:n-50; n-50:2:n+50; n+75:75:K-1; K-1]
@@ -83,13 +86,50 @@ for (pstar, sel, relaxed) in optimized
             cost(WithNoise(Risk(), NOISE^2 / N_TRAIN), with_modeled(BASE, pstar), POOL[sel]))
 end
 
+# The training sets themselves (structure indices), for later checks such as rank(M_TM) vs. p.
+write_table(joinpath(OUT, "training_sets.csv"), ["design", "structures"],
+            [(name, join(train, " ")) for (name, train) in designs])
+
 # ---------------------------------------------------------------- risk vs. p
-tasks = [(name, train, p) for (name, train) in designs for p in P_GRID]
-println("evaluating ", length(tasks), " (design, p) pairs on ", Threads.nthreads(), " threads")
-results = tmap(tasks) do (name, train, p)
-    r = risks(X, PRIOR, train, p, TRUTHS)
-    (name, p, r.expected, r.heldout, r.expected_alias, r.param_alias, r.aliasing_norm)
+# One training set at a time (its p values spread over the threads, largest first for balance),
+# checkpointed after each set. Every evaluation serves all truth kinds.
+println("evaluating ", length(designs), " training sets × ", length(P_GRID), " values of p on ",
+        Threads.nthreads(), " threads"); flush(stdout)
+const PARTIAL = joinpath(OUT, "risk_vs_p_partial.csv")
+isfile(PARTIAL) && rm(PARTIAL)
+all_results = [Any[] for _ in TRUTH_KINDS]
+for (name, train) in designs
+    t0 = time()
+    test = setdiff(POOL, train)
+    M, Mt = X[train, :], X[test, :]
+    order = sort(P_GRID; by = p -> min(p, N_TRAIN) * (K - p) + p * min(p, N_TRAIN), rev = true)
+    out = Dict{Int,Any}()
+    lk = ReentrantLock()
+    Threads.@threads :greedy for p in order
+        r = try
+            risks(X, PRIOR, train, p, TRUTHS; test, M, Mt)
+        catch e                                   # one failed factorization must not end the run
+            println("  $name, p = $p failed: ", sprint(showerror, e)); flush(stdout)
+            nan = fill(NaN, length(TRUTHS))
+            (; expected = NaN, heldout = nan, expected_alias = NaN, param_alias = nan, aliasing_norm = NaN)
+        end
+        lock(() -> out[p] = r, lk)
+    end
+    for (k, kind) in enumerate(TRUTH_KINDS), p in P_GRID
+        r = out[p]
+        push!(all_results[k], (name, p, r.expected, r.heldout[k], r.expected_alias, r.param_alias[k],
+                               r.aliasing_norm))
+    end
+    open(PARTIAL, "a") do io
+        for (k, kind) in enumerate(TRUTH_KINDS), row in all_results[k][end-length(P_GRID)+1:end]
+            println(io, kind, ",", join((csv_field(x) for x in row), ","))
+        end
+    end
+    @printf("  %-24s %6.1f min\n", name, (time() - t0) / 60); flush(stdout)
 end
+
+for (k, TRUTH) in enumerate(TRUTH_KINDS)
+results = all_results[k]
 write_table(joinpath(OUT, "risk_vs_p_truth_$(TRUTH).csv"),
             ["design", "p", "expected_risk", "heldout_risk", "expected_aliasing", "parameter_aliasing",
              "aliasing_norm_2"], results)
@@ -100,7 +140,7 @@ curve(name, col) = [r[col] for r in results if r[1] == name]
 panels = ((3, "expected risk"), (4, "held-out risk (truth: $(TRUTH))"),
           (5, "expected aliasing"), (6, "parameter aliasing (truth: $(TRUTH))"),
           (7, "aliasing norm ‖A‖₂ (as in the paper)"))
-fig = plot(layout = (5, 1), size = (900, 1700), legend = :topleft, xlabel = "modeled clusters p",
+fig = plot(layout = (5, 1), size = (900, 1700), legend = :topleft, left_margin = 12Plots.mm, xlabel = "modeled clusters p",
            yscale = :log10, link = :x)
 for (k, (col, label)) in enumerate(panels)
     rand_curves = reduce(hcat, [curve("random $d", col) for d in 1:N_RANDOM])
@@ -122,3 +162,4 @@ for (a, b) in ((1, 2), (3, 4))
 end
 plot!(fig[1]; title = "Cluster expansion ($(SOURCE) pool), n = $N_TRAIN training structures, $K true clusters")
 save_figure(fig, joinpath(OUT, "risk_vs_p_truth_$(TRUTH).png"))
+end

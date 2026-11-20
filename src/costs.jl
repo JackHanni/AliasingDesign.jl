@@ -66,7 +66,26 @@ cost_op(c::Union{Aliasing,Risk}, prob::DesignProblem, points, weights) =
     fit_cost_op(c, prob, weighted_fit(prob, points, weights))
 
 fit_cost_op(c::Aliasing, prob::DesignProblem, fit) = fit.A * prior_sqrt_U(prob)
-fit_cost_op(c::Risk, prob::DesignProblem, fit) = risk_operator(prob, zeros(prob.p, prob.p), fit.A)  # B = I
+fit_cost_op(c::Risk, prob::DesignProblem, fit) = risk_operator(prob, nothing, fit.A)  # B = I
+
+# The risk cost without building its whole operator: see `risk_blocks`.
+function cost(c::Risk, prob::DesignProblem, points)
+    (M_TM, M_TU) = design_matrices(prob, points)
+    P = pinv(M_TM)
+    return risk_sqnorm(c.norm, prob, I - P * M_TM, P * M_TU)
+end
+fit_cost(c::Risk, prob::DesignProblem, fit) = risk_sqnorm(c.norm, prob, nothing, fit.A)
+
+risk_sqnorm(::Frobenius, prob::DesignProblem, I_minus_B, A) =
+    sum(abs2, risk_blocks(prob, I_minus_B, A)) + risk_fixed_sqnorm(prob)
+risk_sqnorm(norm::L2Norm, prob::DesignProblem, I_minus_B, A) =
+    sqnorm(risk_operator(prob, I_minus_B, A), norm)
+
+# The top rows of K = get_K(norm, X_risk), the only ones the first variation and the gradient use
+# (they meet K through R_PMᵀ, which is zero below row r; see `risk_blocks`).
+risk_K(::Frobenius, prob::DesignProblem, I_minus_B, A) = risk_blocks(prob, I_minus_B, A)
+risk_K(norm::L2Norm, prob::DesignProblem, I_minus_B, A) =
+    get_K(norm, risk_operator(prob, I_minus_B, A))[1:size(first(prediction_matrices(prob)), 1), :]
 
 # X_risk = M_𝒫 E_θ Σ^{1/2} / √n_𝒫, computed by blocks: M_𝒫 E_θ = [M_PM (I − B)   M_PU − M_PM A].
 # Without forming the (p+q)×(p+q) E_θ, it costs O(n p q) instead of O(n (p+q)²). With M_𝒫 replaced by
@@ -78,12 +97,39 @@ function cost_op(c::Risk, prob::DesignProblem, points)
     return risk_operator(prob, I - P * M_TM, P * M_TU)
 end
 
-function risk_operator(prob::DesignProblem, I_minus_B, A)
+# `I_minus_B = nothing` stands for B = I (the weighted limit): a zero modeled block.
+risk_operator(prob::DesignProblem, I_minus_B, A) =
+    [risk_blocks(prob, I_minus_B, A); risk_fixed_rows(prob)]
+
+# R_𝒫 is upper triangular, so its modeled columns R_PM vanish below row r = min(p, rows of R_𝒫):
+# only the top r rows of X_risk depend on the design. They are returned here, at a cost of
+# O(r p (p + q)) instead of O(rows · p (p + q)); the rest of X_risk, [0  R_PU,low Σ_𝒰^{1/2}] / √n_𝒫,
+# is fixed for a given p (`risk_fixed_rows`, `risk_fixed_sqnorm`).
+function risk_blocks(prob::DesignProblem, I_minus_B, A)
     (R_PM, R_PU) = prediction_matrices(prob)
-    D = prior_sqrt(prob)
-    p = prob.p
-    X = [R_PM * I_minus_B * D[1:p, 1:p]  (R_PU - R_PM * A) * D[p+1:end, p+1:end]]
-    return X ./ sqrt(prob.n_P)
+    r, p = size(R_PM)
+    d = sqrt.(prob.prior) ./ sqrt(prob.n_P)
+    X_U = (view(R_PU, 1:r, :) .- R_PM * A) .* view(d, p+1:length(d))'
+    X_M = I_minus_B === nothing ? zeros(r, p) : (R_PM * I_minus_B) .* view(d, 1:p)'
+    return [X_M X_U]
+end
+
+function risk_fixed_rows(prob::DesignProblem)
+    (R_PM, R_PU) = prediction_matrices(prob)
+    r, p = size(R_PM)
+    d_U = sqrt.(prob.prior[p+1:end]) ./ sqrt(prob.n_P)
+    low = view(R_PU, r+1:size(R_PU, 1), :)
+    return [zeros(size(low, 1), p)  low .* d_U']
+end
+
+function risk_fixed_sqnorm(prob::DesignProblem)
+    (R_PM, R_PU) = prediction_matrices(prob)
+    r, p = size(R_PM)
+    total = 0.0
+    for (j, k) in enumerate(p+1:length(prob.prior))
+        total += prob.prior[k] * sum(abs2, view(R_PU, r+1:size(R_PU, 1), j))
+    end
+    return total / prob.n_P
 end
 
 "Σ^{1/2}, the square root of the prior covariance of all `p + q` coefficients."
@@ -97,13 +143,16 @@ prior_sqrt_U(prob::DesignProblem) = Diagonal(sqrt.(prob.prior[prob.p+1:end]))
 
 The modeled and unmodeled blocks of the compressed prediction matrix `R_𝒫` (`M_𝒫 = Q R_𝒫`; see
 `DesignProblem`). Any norm of `M_𝒫 Y` equals that of `R_𝒫 Y`, and `M_PMᵀ M_P· = R_PMᵀ R_P·`;
-divide by `prob.n_P`, not by the row count. Errors if `predict` was not given.
+divide by `prob.n_P`, not by the row count. `R_𝒫` is upper triangular, so `R_PM` is zero below row
+`r = min(p, rows)` and is returned as its top `r` rows only (`r × p`; the same norms and inner
+products); `R_PU` keeps every row. Errors if `predict` was not given.
 """
 function prediction_matrices(prob::DesignProblem)
     prob.R_P === nothing &&
         throw(ArgumentError("Risk needs prediction points: pass `predict` to DesignProblem"))
     R = prob.R_P
-    return (view(R, :, 1:prob.p), view(R, :, prob.p+1:size(R, 2)))
+    r = min(prob.p, size(R, 1))
+    return (view(R, 1:r, 1:prob.p), view(R, :, prob.p+1:size(R, 2)))
 end
 
 """
@@ -183,10 +232,11 @@ end
 # Dropping the zero modeled-block columns of X_risk changes neither norm.
 function fit_first_variation(c::Risk, prob::DesignProblem, fit)
     (; M_TM, M_TU, R, A) = fit
-    (M_PM, M_PU) = prediction_matrices(prob)    # compressed: R_PM, R_PU
-    D = Diagonal(sqrt.(prob.prior[prob.p+1:end]))
+    (M_PM, _) = prediction_matrices(prob)       # compressed: the top r rows of R_PM
+    p = prob.p
+    D = Diagonal(sqrt.(prob.prior[p+1:end]))
     s = 1 / sqrt(prob.n_P)
-    K = get_K(c.norm, s * (M_PU - M_PM * A) * D)
+    K = risk_K(c.norm, prob, nothing, A)[:, p+1:end]   # top rows of K_U (X_U already has s and D)
     Z = (M_TM / R) / R'          # row i: (G_MM⁻¹ m(tᵢ))ᵀ
     Res = M_TU - M_TM * A        # row i: (u(tᵢ) − Aᵀ m(tᵢ))ᵀ
     # Z * (M_PMᵀ K), not (Z M_PMᵀ) K: the left grouping builds an N × n_𝒫 matrix first, which
@@ -240,7 +290,8 @@ function top_rank_one(K::AbstractMatrix)
 end
 
 """
-    optimize_weights(c, prob, points, weights; maxiter = 10_000, rtol = 1e-8, η = 1.0, cap = nothing)
+    optimize_weights(c, prob, points, weights; maxiter = 10_000, rtol = 1e-8, η = 1.0, cap = nothing,
+                     step = :grow, grow = 1.5)
         -> (; weights, cost, λ, residual, iterations, converged)
 
 Minimize the cost `c` over weights on `points` with the Fisher–Rao flow (exponentiated
@@ -250,11 +301,22 @@ With `cap`, each weight is also held at most `cap` (use `cap = 1/n` on a pool, s
 structure counts once; eq. (28)): after every update, weights over the cap are clipped and the
 rest renormalized (`project_capped`).
 
-Step size: `h = η / max|g − λ|` from the *first* gradient, then held fixed, so the steps
-shrink as the gradient does. (Recomputing it every step would make the step length constant,
-and the weights would oscillate around the optimum without converging.) If a step would raise
-the cost (or would make `G_MM` singular, giving a NaN cost), `h` is halved and the step retried;
-if `h` falls below `1e-300` with no improvement, the run stops there.
+Step size: `h = η / max|g − λ|` from the *first* gradient. It is not recomputed from later
+gradients, so the steps shrink as the gradient does. (Recomputing it every step would make the step
+length constant, and the weights would oscillate around the optimum without converging.) If a step
+would raise the cost (or would make `G_MM` singular, giving a NaN cost), `h` is halved and the step
+retried; if 50 halvings in a row (a step ~1e-15 times the last one that worked) do not lower the
+cost, the cost is at a rounding-level plateau and the run stops there. After an accepted
+step, `h` changes by the rule `step`:
+
+- `:grow`: `h *= grow` after every accepted step, so a step size that started (or was halved) too
+  small recovers; `grow = 1` keeps it fixed.
+- `:clean`: `h *= grow` only after a step accepted at the first try (none refused this iteration).
+- `:ratio` (trust-region style): compare the decrease with the first-order prediction
+  `⟨g, w − w_trial⟩`; `h *= 2` when their ratio is above 3/4, `h /= 2` when below 1/4.
+- `:bb` (Barzilai–Borwein): `h = ⟨s, W⁻¹s⟩ / ⟨s, y⟩` from the last step `s = Δw` and the change in
+  the first variation `y = Δg`, in the Fisher–Rao metric `W⁻¹ = diag(1/w)`; kept within a factor
+  of 10 of the last step; `h *= grow` when `⟨s, y⟩ ≤ 0`. Still monotone (refused steps halve).
 
 Returns a named tuple:
 - `weights`: the final weights.
@@ -267,7 +329,10 @@ Returns a named tuple:
 - `converged`: whether `residual ≤ rtol * max(maximum(abs, g), cost)` was reached within `maxiter`.
 """
 function optimize_weights(c::DesignCost, prob::DesignProblem, points, weights;
-                          maxiter = 10_000, rtol = 1e-8, η = 1.0, cap = nothing)
+                          maxiter = 10_000, rtol = 1e-8, η = 1.0, cap = nothing, step = :grow,
+                          grow = 1.5)
+    step in (:grow, :clean, :ratio, :bb) ||
+        throw(ArgumentError("step must be :grow, :clean, :ratio or :bb, got $(repr(step))"))
     weights = cap === nothing ? weights ./ sum(weights) : project_capped(weights, cap)
     length(weights) == length(points) ||
         throw(ArgumentError("got $(length(points)) points and $(length(weights)) weights"))
@@ -278,6 +343,7 @@ function optimize_weights(c::DesignCost, prob::DesignProblem, points, weights;
     S = fit_cost(c, prob, fit)
     λ, residual, iterations, converged = NaN, Inf, 0, false
     step_size = NaN
+    last_w, last_g = nothing, nothing             # for :bb
     for iter in 1:maxiter
         δS_δρ = fit_first_variation(c, prob, fit)
         λ = kkt_multiplier(δS_δρ, weights; cap)
@@ -289,7 +355,11 @@ function optimize_weights(c::DesignCost, prob::DesignProblem, points, weights;
             break
         end
         isnan(step_size) && (step_size = η / maximum(abs, δS_δρ .- λ))   # set once
+        if step === :bb && last_w !== nothing
+            step_size = bb_step(weights .- last_w, δS_δρ .- last_g, weights, step_size, grow)
+        end
         stalled = false
+        halvings = 0
         while true
             # Zero weights stay zero under the multiplicative update, so update only the positive
             # ones (at a zero weight, exp of a large exponent is Inf, and 0 · Inf = NaN).
@@ -302,11 +372,23 @@ function optimize_weights(c::DesignCost, prob::DesignProblem, points, weights;
             trial = cap === nothing ? trial ./ sum(trial) : project_capped(trial, cap)
             S_trial, fit_trial = trial_cost(c, prob, M_TM, M_TU, trial)
             if S_trial <= S                  # false for NaN: a step to a singular G_MM is refused
-                weights, S, fit = trial, S_trial, fit_trial
+                predicted = sum(δS_δρ .* (weights .- trial))       # first-order decrease (λ cancels)
+                step === :bb && ((last_w, last_g) = (weights, δS_δρ))
+                weights, S_old, S, fit = trial, S, S_trial, fit_trial
+                if step === :grow || (step === :clean && halvings == 0)
+                    step_size *= grow
+                elseif step === :ratio && predicted > 0
+                    ρ = (S_old - S) / predicted
+                    step_size *= ρ > 3/4 ? 2.0 : ρ < 1/4 ? 0.5 : 1.0
+                end
                 break
             end
             step_size /= 2
-            if step_size < 1e-300            # no step lowers the cost: stop here
+            halvings += 1
+            # No step lowers the cost: stop. 50 halvings (2⁻⁵⁰ ≈ 1e-15 of the last step that
+            # worked) only fail at a rounding-level plateau, i.e. at the optimum; halving further
+            # would cost a refit each time for nothing.
+            if halvings >= MAX_HALVINGS || step_size < 1e-300
                 stalled = true
                 break
             end
@@ -320,6 +402,19 @@ function optimize_weights(c::DesignCost, prob::DesignProblem, points, weights;
         residual = kkt_residual(δS_δρ, weights, λ; cap)
     end
     return (; weights, cost = S, λ, residual, iterations, converged)
+end
+
+const MAX_HALVINGS = 50
+
+# Barzilai–Borwein step for the Fisher–Rao (mirror) update, in the metric diag(1/w): the first
+# BB formula ⟨s, W⁻¹s⟩/⟨s, y⟩, within a factor of 10 of the previous step; grow it when the
+# curvature estimate ⟨s, y⟩ is not positive.
+function bb_step(s, y, w, h, grow)
+    pos = w .> 0
+    sy = sum(s[pos] .* y[pos])
+    sy > 0 || return h * grow
+    h_bb = sum(abs2.(s[pos]) ./ w[pos]) / sy
+    return clamp(h_bb, h / 10, 10h)
 end
 
 # The cost and fit at trial weights, or (Inf, nothing) if they leave G_MM exactly singular (fewer

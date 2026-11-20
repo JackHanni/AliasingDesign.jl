@@ -126,6 +126,26 @@
         @test gram(cost_op(Risk(), prob, g, w)) ≈ gram(M_P * error_operator(prob, g, w) * D / sqrt(length(xp)))
     end
 
+    @testset "risk from the triangular R_P: prediction sets of every shape ($nP points)" for nP in (40, 8, 3)
+        # R_PM is zero below row p, so only the top rows are multiplied (`risk_blocks`); the rest is
+        # a constant. Check against the risk computed directly from M_P, for tall (40 > p + q = 8),
+        # square-ish and short (3 < p = 4) prediction sets, finite and weighted, in both norms.
+        xq = sort(2rand(rng, nP) .- 1)
+        pr = DesignProblem(legendre_basis(8); p = 4, prior = k -> 1 / k, predict = xq)
+        M_P = design_matrix(pr.basis, xq)
+        D = Diagonal(sqrt.(pr.prior))
+        g = collect(range(-1, 1; length = 9))
+        w = normalize(rand(rng, 9) .+ 0.1, 1)
+        for pts in (2rand(rng, 3) .- 1, 2rand(rng, 6) .- 1)
+            X = M_P * error_operator(pr, pts) * D / sqrt(nP)
+            @test cost(Risk(), pr, pts) ≈ sum(abs2, X)
+            @test cost(Risk(L2Norm()), pr, pts) ≈ opnorm(X)^2
+        end
+        X = M_P * error_operator(pr, g, w) * D / sqrt(nP)
+        @test cost(Risk(), pr, g, w) ≈ sum(abs2, X)
+        @test cost(Risk(L2Norm()), pr, g, w) ≈ opnorm(X)^2
+    end
+
     @testset "scaling the prior scales the cost: $(c)" for c in COSTS
         # Every cost is quadratic in Σ^{1/2}, so it is linear in a common scale of the prior.
         scaled = DesignProblem(prob.basis; p = prob.p, prior = 3 .* prob.prior, predict = prob.predict)

@@ -13,8 +13,10 @@ The prediction points are processed once, here, since every `Risk` evaluation ne
 - `n_P`: the number of prediction points.
 - `R_P`: `R_𝒫` from the reduced QR factorization `M_𝒫 = Q R_𝒫` (only `R_𝒫` is kept). `Q` has orthonormal columns, so `‖M_𝒫 Y‖ = ‖R_𝒫 Y‖` for every `Y`, in the
   Frobenius and the operator norm alike: the risk costs, their first variations and gradients can
-  all use the `(p+q)`-row `R_𝒫` instead of the `n_P`-row `M_𝒫`, exactly. (When `n_P ≤ p + q`,
-  `R_𝒫 = M_𝒫`.)
+  all use `R_𝒫`, with `min(n_P, p + q)` rows, instead of the `n_P`-row `M_𝒫`, exactly. `R_𝒫` is
+  upper triangular, so its first `p` columns vanish below row `p`: the part of the risk that
+  depends on the design needs only the top `p` rows (see `prediction_matrices`). The QR is taken
+  for short `M_𝒫` too, for that structure.
 - `M_P`: `M_𝒫` itself, reused by `design_matrices` when the training points are the prediction
   points themselves (a pool).
 
@@ -41,7 +43,7 @@ function DesignProblem(basis; p, prior = ones(length(basis)), predict = nothing)
     predict === nothing && return DesignProblem(basis, p, σ², predict, 0, nothing, nothing)
     M_P = design_matrix(basis, predict)
     n_P = size(M_P, 1)
-    R_P = n_P > nbasis ? Matrix(qr(M_P).R) : M_P      # thin QR only when M_𝒫 is tall
+    R_P = Matrix(qr(M_P).R)        # min(n_P, p + q) rows, upper triangular (trapezoidal)
     return DesignProblem(basis, p, σ², predict, n_P, R_P, M_P)
 end
 

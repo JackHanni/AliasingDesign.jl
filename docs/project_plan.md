@@ -675,23 +675,36 @@ scripts are in [`experiments/`](../experiments/README.md).
 
 **Implementation notes.**
 
-- *Prediction matrix, by reduced QR when it is tall.* Every risk quantity (the cost, its first
+- *Prediction matrix, by reduced QR.* Every risk quantity (the cost, its first
   variation and gradient, the noise term) is a norm of $M_{\mathcal P}Y$ or an inner product
   $M_{\mathcal P}^\top M_{\mathcal P}$. With the reduced QR factorization
   $M_{\mathcal P} = QR_{\mathcal P}$, $Q$ has orthonormal columns, so
   $\lVert M_{\mathcal P}Y\rVert = \lVert R_{\mathcal P}Y\rVert$ in both the Frobenius and the
   operator norm, and $M_{\mathcal P}^\top M_{\mathcal P} = R_{\mathcal P}^\top R_{\mathcal P}$:
-  $R_{\mathcal P}$ replaces $M_{\mathcal P}$ exactly. It is applied only when it helps, when
-  $M_{\mathcal P}$ is tall ($n_{\mathcal P} > p + q$): $R_{\mathcal P}$ then has $p + q$ rows instead
-  of $n_{\mathcal P}$ (2,346 → 300 for the cluster-expansion pool with 300 clusters, 50 → 7 for the 1D
-  benchmark). When $n_{\mathcal P} \le p + q$, $M_{\mathcal P}$ is used as is. `DesignProblem`
-  factorizes once, keeps only $R_{\mathcal P}$ (never $Q$) for the whole basis, and splits it into
-  modeled and unmodeled columns by views, so `with_modeled(prob, p)` changes $p$ for free. Divide by
-  $n_{\mathcal P}$, not by the row count of $R_{\mathcal P}$.
+  $R_{\mathcal P}$ replaces $M_{\mathcal P}$ exactly. It helps in two ways.
+  (i) When $M_{\mathcal P}$ is tall ($n_{\mathcal P} > p + q$), $R_{\mathcal P}$ has $p + q$ rows
+  instead of $n_{\mathcal P}$ (50 → 7 for the 1D benchmark).
+  (ii) $R_{\mathcal P}$ is upper triangular, so its modeled columns $R_{\mathcal{PM}}$ vanish below
+  row $p$: in $M_{\mathcal P}E_\theta = [M_{\mathcal{PM}}(I - B)\ \ M_{\mathcal{PU}} - M_{\mathcal{PM}}A]$
+  only the top $p$ rows depend on the design, and the rest contributes a constant
+  $\lVert R_{\mathcal{PU},\text{low}}\Sigma_{\mathcal U}^{1/2}\rVert_F^2$ for each $p$. The products
+  with $A$ cost $O(p^2 q)$ instead of $O(n_{\mathcal P}\, p\, q)$; on the 2,346-structure
+  cluster-expansion pool at $p = 100$ the weighted risk cost went from 0.29 s to 0.005 s (16
+  threads), and a finite-$n$ risk cost (one exchange trial) from 0.33 s to 0.10 s. (ii) holds for
+  short $M_{\mathcal P}$ too ($R_{\mathcal P}$ is then upper trapezoidal), so the QR is always taken.
+  `DesignProblem` factorizes once, keeps only $R_{\mathcal P}$ (never $Q$) for the whole basis, and
+  splits it into modeled and unmodeled columns by views, so `with_modeled(prob, p)` changes $p$ for
+  free. Divide by $n_{\mathcal P}$, not by the row count of $R_{\mathcal P}$.
 - *Weighted fits by QR.* $A[\rho]$ comes from a QR factorization of $\sqrt W M_{\mathcal{TM}}$
   (`weighted_fit`), never from forming $G_{\mathcal{MM}}$, which would square the condition number.
   `optimize_weights` builds the design matrices once per run and reuses each accepted step's fit
   for the next first variation; `WithNoise` shares one fit between its two terms.
+- *Fisher–Rao step size.* The step starts at $\eta/\max|g - \lambda|$, halves when a step would
+  raise the cost, and grows by `grow` = 1.5 after each accepted step. The run stops when 50
+  halvings in a row fail (a rounding-level plateau): before, it halved to $10^{-300}$, about 1,000
+  refits for nothing. Compared with a fixed step (`grow = 1`), on the cluster-expansion pool
+  (300 iterations, same final cost): 84 s vs. 120 s at $p = 300$, 118 s vs. 102 s at $p = 100$; on
+  1D Legendre problems run to 20,000 iterations, about half the time with a smaller KKT residual.
 - *Risk operator by blocks.* $M_{\mathcal P}E_\theta$ is computed as
   $[M_{\mathcal{PM}}(I - B)\ \ M_{\mathcal{PU}} - M_{\mathcal{PM}}A]$, without forming the
   $(p+q)\times(p+q)$ matrix $E_\theta$.

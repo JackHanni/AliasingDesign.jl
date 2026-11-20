@@ -20,7 +20,7 @@ tables and PNG figures to `experiments/output/<name>/` (not tracked by git; reru
 | `fourier.jl` | Fourier fit | (a) heatmap of A at n = 9 equally spaced points; (b) Nyquist sweep; (c) coherent vs. incoherent aliasing, Frobenius and spectral; (d) predictions on [0, π/2] only, where uniform is no longer optimal. | ~2 min |
 | `equation_of_state.jl` | Equation of state | Volumes for a BM3 fit of a Cu Rose curve (prior calibrated on Al), n = 5, 7, 9: cost and Monte Carlo errors of V₀, B₀, B₀′ for evenly spaced, Chebyshev and optimized volumes. | ~1 min |
 | `cluster_expansion.jl` | Cluster expansion; Discrete domains | Capped Fisher–Rao → top-n rounding → exchange vs. random training sets: costs, held-out RMSE, the relaxation gap, and risk vs. p. | ~1 min (demo pool); longer on the JuCE pool |
-| `cluster_expansion_paper.jl` | Cluster expansion (GAD paper scale, cf. Fig. 6) | n = 600 training structures, all 2,344 clusters true; expected risk, held-out risk and aliasing vs. p for natural-ordering, random (mean ± std) and optimized training sets. | ~10–15 min (default p grid); ~1–1.5 h with `P_GRID=all` |
+| `cluster_expansion_paper.jl` | Cluster expansion (GAD paper scale, cf. Fig. 6) | n = 600 training structures, all 2,344 clusters true; expected risk, held-out risk and aliasing vs. p for natural-ordering, random (mean ± std) and optimized training sets. | ~20 min on 16 cores (default p grid); hours with `P_GRID=all` (checkpointed per training set) |
 | `aspect_ratio.jl` | Cluster expansion | Expected risk, held-out risk and aliasing vs. the aspect ratio p/n, several n and random draws per ratio (all points plus mean ± std), random vs. natural ordering. | a few min |
 
 `common.jl` holds the shared helpers (multi-start Fisher–Rao, the steps 2–4 pipeline, reference
@@ -48,9 +48,9 @@ batch jobs; see https://rc.byu.edu/wiki/?id=Getting+Started.
    ```
    sbatch experiments/slurm/run.sh experiments/aspect_ratio.jl
    sbatch experiments/slurm/run.sh experiments/cluster_expansion_paper.jl
-   sbatch --time 04:00:00 --cpus-per-task 32 --mem 32G \
+   sbatch --time 06:00:00 --cpus-per-task 32 --mem 32G \
           --export=ALL,P_GRID=all experiments/slurm/run.sh experiments/cluster_expansion_paper.jl
-   sbatch --export=ALL,TRUTH=unit experiments/slurm/run.sh experiments/cluster_expansion_paper.jl
+   sbatch --export=ALL,TRUTH=unit experiments/slurm/run.sh experiments/aspect_ratio.jl
    ```
 
    `squeue -u $USER` lists your jobs, `scancel <jobid>` cancels one, and the log is
@@ -99,6 +99,8 @@ prediction points* and *Cluster expansion*).
   the two agree on average by construction (checked: within 0.5% over 20,000 truths) and the plot
   shows the spread. `TRUTH=unit` draws unit-variance ECIs (JuCE's synthetic setup), a truth the prior
   did not anticipate: whether an optimized design still wins there is the real test.
+  `cluster_expansion_paper.jl` does both truth kinds in one run by default (`TRUTH=prior,unit`):
+  the design-only quantities are computed once.
 
 - Costs at τ = 0 can be degenerate (plan, *Findings*): monomial aliasing collapses toward t = 0,
   and Frobenius risk is minimized by sampling the prediction distribution. The scripts report a

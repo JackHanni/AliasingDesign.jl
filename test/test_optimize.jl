@@ -165,6 +165,15 @@
                       collect(AliasingDesign.set_matrices(pc, sort(replace(S, o => j)))[1:3])
             end
         end
+        # n < p: the n × n block costs agree with the exact (minimum-norm) cost.
+        for c in costs
+            pc = AliasingDesign.PoolCache(c, prob, pool)
+            for n in (1, 2, 3, 4)
+                S = sort(randperm(rng, 30)[1:n])
+                @test AliasingDesign.row_cost(pc, S) ≈ cost(c, prob, pool[S]) rtol = 1e-8
+            end
+        end
+        @test AliasingDesign.row_cost(AliasingDesign.PoolCache(Risk(), prob, pool), [5, 5]) == Inf
         # A rank-deficient set has no fast cost.
         pc = AliasingDesign.PoolCache(Risk(), prob, pool)
         H, P1, P2, _ = AliasingDesign.set_matrices(pc, [1, 2, 3])
@@ -175,6 +184,8 @@
         @test length(g.selected) == 10 && allunique(g.selected)
         @test sort(g.path) == g.selected
         @test sort(greedy_select(c, prob, pool, 7).path) == sort(g.path[1:7])   # nested sets
+        @test sort(greedy_select(c, prob, pool, 2).path) == sort(g.path[1:2])   # below p too
+        @test greedy_select(c, prob, pool, 10; start = g.path[1:3]).path == g.path
         random_costs = [cost(c, prob, pool[sort(randperm(rng, 30)[1:10])]) for _ in 1:50]
         @test cost(c, prob, pool[g.selected]) <= sort(random_costs)[25]   # the median
 
@@ -185,7 +196,12 @@
         @test length(r.selected) == 10 && allunique(r.selected)
         slow = exchange(c, prob, pool, start)
         @test r.cost <= 1.05 * slow.cost
-        @test_throws ArgumentError exchange(c, prob, pool, [1, 2]; fast = true)
+        # n < p: the fast exchange works there too.
+        start2 = [3, 17]
+        r2 = exchange(c, prob, pool, start2; fast = true)
+        @test r2.cost <= cost(c, prob, pool[start2])
+        @test r2.cost ≈ cost(c, prob, pool[r2.selected])
+        @test_throws ArgumentError exchange(c, prob, pool, [1, 1, 2]; fast = true)
         @test_throws ArgumentError greedy_select(Risk(L2Norm()), prob, pool, 6)
     end
 end

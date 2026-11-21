@@ -1,34 +1,35 @@
-# Cluster expansion on a tight budget: the user has chosen the modeled clusters (p fixed) and can
-# afford n DFT calculations, n not much larger than p. Which n structures should they compute?
+# Cluster expansion on a budget: the user has chosen the p modeled clusters (the columns of the fit)
+# and can afford n DFT calculations (the rows). Which n structures should they compute? Both
+# regimes are swept, n < p (more columns than rows: the minimum-norm fit, with data insufficiency)
+# and n > p (more rows than columns: aliasing and noise only), through the interpolation spike at
+# n = p, in the style of the GAD paper's figures (one curve per training-set family, dense x axis).
 #
 #   julia -t auto --project=experiments experiments/ce_budget.jl
 #
-# For each p in P_LIST and each budget n = ratio · p (ratio in RATIOS), training sets of n
-# structures from the JuCE pool:
-#   natural    the first n structures in the enumeration's natural ordering;
-#   random     N_RANDOM random sets (median and 10–90% band);
-#   rounded    capped Fisher–Rao flow on the pool (cap 1/n), then the n largest weights. Kept to
-#              show that the relaxation says nothing here: the uniform weights on the whole pool
-#              already reach the floor, so the weights barely move and the n largest are arbitrary;
-#   greedy     greedy forward selection on the exact finite-n cost (`greedy_select`), from p
-#              structures chosen by pivoted QR; one greedy path per p serves every budget;
-#   exchanged  `greedy` improved by fast Fedorov exchange (EXCHANGE_SWEEPS swaps,
-#              EXCHANGE_CANDIDATES candidates per swap), for n ≤ EXCHANGE_MAX_N.
-# Each set is scored like cluster_expansion_paper.jl: expected risk (from the design alone) and
-# held-out risk (fit synthetic energies, error on the rest of the pool) for both truth kinds.
+# For each p in P_LIST, budgets n from p/4 to 4p (N_GRID values, plus every n within 10% of p).
+# Families of nested training sets, so each is one fixed ordering evaluated at every n (dense):
+#   random     N_RANDOM random orderings (median and interquartile band);
+#   natural    the enumeration's natural ordering (smallest supercells first);
+#   greedy     greedy forward selection on the exact finite-n cost (`greedy_select`): a standard
+#              baseline, not the method of the plan.
+# The plan's method, at the budgets SPARSE (multiples of p; one optimization per budget):
+#   Fisher–Rao + rounding  steps 1–3: capped Fisher–Rao flow on the pool (cap 1/n), n largest weights;
+#   steps 1–4              that set refined by exchange (step 4) on the exact finite-n cost;
+#   greedy + step 4        the greedy set refined by the same exchange.
+# Exchange: `exchange(...; fast = true)`, EXCHANGE_SWEEPS swaps, EXCHANGE_CANDIDATES candidates.
 #
-# The floor is the risk of the fit on the whole pool: the error of the unmodeled clusters that no
-# training set of these p clusters can remove. Distances to it ("excess risk") show how much of the
-# avoidable error each design removes.
+# Each set is scored on the held-out structures (the rest of the pool), as in
+# cluster_expansion_paper.jl: expected risk (from the design alone), held-out risk for both truth
+# kinds (prior and unit-variance ECIs), expected aliasing, and the paper's ‖A‖₂.
 #
-# Figures, per truth kind:
-#   budget_truth_*.png   held-out risk vs n, one panel per p;
-#   savings_truth_*.png  how many random structures match the exchanged set's risk (median random);
-#   rounding.png         the design cost of the relaxed weights, the rounded, greedy and exchanged sets.
+# Figures:
+#   budget_p<p>.png  per p: one panel per quantity against n, with n = p marked;
+#   savings.png      random structures needed to match greedy + step 4, ÷ n (median random set);
+#   method.png       per p: the design cost of the relaxed optimum and of each selection, vs n.
 #
-# Settings: P_LIST ("50,100,300"), RATIOS ("1,1.1,1.25,1.5,2,3,4"), N_RANDOM (50), N_TRUTHS (50),
-# NOISE (1e-3), POOL_MAXITER (300), EXCHANGE_SWEEPS (30), EXCHANGE_CANDIDATES (20),
-# EXCHANGE_MAX_N (1200).
+# Settings: P_LIST ("50,100,300"), N_GRID (200), N_RANDOM (20), N_TRUTHS (50), NOISE (1e-3),
+# SPARSE ("0.25,0.5,0.75,0.9,1,1.1,1.25,1.5,2,3,4", multiples of p), POOL_MAXITER (300),
+# EXCHANGE_SWEEPS (30), EXCHANGE_CANDIDATES (20).
 
 include("common.jl")
 include("ce_pool.jl")
@@ -36,151 +37,160 @@ include("ce_pool.jl")
 const OUT = outdir("ce_budget")
 envlist(T, key, default) = parse.(T, split(get(ENV, key, default), ","))
 const P_LIST = envlist(Int, "P_LIST", "50,100,300")
-const RATIOS = envlist(Float64, "RATIOS", "1,1.1,1.25,1.5,2,3,4")
-const N_RANDOM = parse(Int, get(ENV, "N_RANDOM", "50"))
+const N_GRID = parse(Int, get(ENV, "N_GRID", "200"))
+const N_RANDOM = parse(Int, get(ENV, "N_RANDOM", "20"))
 const N_TRUTHS = parse(Int, get(ENV, "N_TRUTHS", "50"))
 const NOISE = parse(Float64, get(ENV, "NOISE", "1e-3"))
+const SPARSE = envlist(Float64, "SPARSE", "0.25,0.5,0.75,0.9,1,1.1,1.25,1.5,2,3,4")
 const POOL_MAXITER = parse(Int, get(ENV, "POOL_MAXITER", "300"))
 const EXCHANGE_SWEEPS = parse(Int, get(ENV, "EXCHANGE_SWEEPS", "30"))
 const EXCHANGE_CANDIDATES = parse(Int, get(ENV, "EXCHANGE_CANDIDATES", "20"))
-const EXCHANGE_MAX_N = parse(Int, get(ENV, "EXCHANGE_MAX_N", "1200"))
 const TRUTH_KINDS = [:prior, :unit]
 
 const X, SIZES, SOURCE = load_pool(typemax(Int))
 const K = size(X, 2)
-const POOL = collect(1:size(X, 1))
+const NPOOL = size(X, 1)
+const POOL = collect(1:NPOOL)
 const PRIOR = cluster_prior(SIZES)
 const BASE = DesignProblem(pool_basis(X); p = 1, prior = PRIOR, predict = POOL)
 const TRUTHS = [synthetic_truths(X, PRIOR; n_truths = N_TRUTHS, noise = NOISE, kind) for kind in TRUTH_KINDS]
 
-"Prior-averaged risk of the fit on the whole pool with the first `p` clusters (the floor)."
-function floor_risk(p)
-    XU = X[:, p+1:end] .* sqrt.(PRIOR[p+1:end])'
-    Q = Matrix(qr(X[:, 1:p]).Q)
-    return sum(abs2, XU - Q * (Q' * XU)) / size(X, 1)
-end
-const FLOORS = Dict(p => floor_risk(p) for p in P_LIST)
-println("floors: ", join(("p = $p: $(round(FLOORS[p]; sigdigits = 4))" for p in P_LIST), ", "))
-
-const BUDGETS = [(p, n) for p in P_LIST for n in unique(round.(Int, p .* RATIOS)) if n <= length(POOL)]
-
-# ---------------------------------------------------------------- optimized sets
-# Greedy: one path per p up to the largest budget (the sets are nested). The noise term uses the
-# largest budget's τ; at NOISE = 1e-3 it is negligible next to the aliasing either way. Greedy
-# selection and the exchange spread their trials over all threads, so they run one at a time.
 cost_for(n) = WithNoise(Risk(), NOISE^2 / n)
-paths = Dict{Int,Vector{Int}}()
+grid(p) = filter(n -> 1 <= n <= NPOOL - 1,
+                 sort(unique([round.(Int, range(p / 4, 4p; length = N_GRID)); round(Int, 0.9p):round(Int, 1.1p)])))
+sparse(p) = filter(n -> 1 <= n <= NPOOL - 1, unique(round.(Int, SPARSE .* p)))
+
+const NAN_SCORE = (; expected = NaN, heldout = fill(NaN, length(TRUTH_KINDS)), expected_alias = NaN,
+                   param_alias = fill(NaN, length(TRUTH_KINDS)), aliasing_norm = NaN)
+score(train, p) = try
+    risks(X, PRIOR, train, p, TRUTHS)
+catch e
+    println("  p = $p, n = $(length(train)) failed: ", sprint(showerror, e)); flush(stdout)
+    NAN_SCORE
+end
+row(p, n, design, r) = (p, n, design, r.expected, r.heldout..., r.expected_alias, r.aliasing_norm)
+const HEADER = ["p", "n", "design", "expected_risk", ("heldout_risk_truth_$k" for k in TRUTH_KINDS)...,
+                "expected_aliasing", "aliasing_norm_2"]
+
+dense_rows, sparse_rows, cost_rows = Any[], Any[], Any[]
+rng = Xoshiro(21)
 for p in P_LIST
     t0 = time()
-    nmax = maximum(n for (pp, n) in BUDGETS if pp == p)
-    paths[p] = greedy_select(cost_for(nmax), with_modeled(BASE, p), POOL, nmax).path
-    @printf("  greedy path for p = %d up to n = %d: %.1f min\n", p, nmax, (time() - t0) / 60); flush(stdout)
-end
-
-println("optimizing ", length(BUDGETS), " budgets on ", Threads.nthreads(), " threads"); flush(stdout)
-optimized = map(BUDGETS) do (p, n)
-    t0 = time()
     prob = with_modeled(BASE, p)
-    c = cost_for(n)
-    r = optimize_weights(c, prob, POOL, fill(1 / length(POOL), length(POOL));
-                         cap = 1 / n, η = 8, maxiter = POOL_MAXITER)
-    rounded = select_points(r.weights, n)
-    greedy = sort(paths[p][1:n])
-    S_rounded, S_greedy = cost(c, prob, POOL[rounded]), cost(c, prob, POOL[greedy])
-    exchanged, S_exchanged, swaps = if n <= EXCHANGE_MAX_N && EXCHANGE_SWEEPS > 0
-        e = exchange(c, prob, POOL, greedy; candidates = EXCHANGE_CANDIDATES, maxiter = EXCHANGE_SWEEPS,
-                     fast = true)
-        (e.selected, e.cost, e.swaps)
-    else
-        (greedy, S_greedy, 0)
-    end
-    @printf("  p = %4d, n = %5d: relaxed %.4g, rounded %.4g, greedy %.4g, exchanged %.4g (%d swaps, %.1f min)\n",
-            p, n, r.cost, S_rounded, S_greedy, S_exchanged, swaps, (time() - t0) / 60); flush(stdout)
-    (; p, n, relaxed = r.cost, S_rounded, S_greedy, S_exchanged, rounded, greedy, exchanged)
-end
-write_table(joinpath(OUT, "rounding.csv"), ["p", "n", "relaxed", "rounded", "greedy", "exchanged", "floor"],
-            [(o.p, o.n, o.relaxed, o.S_rounded, o.S_greedy, o.S_exchanged, FLOORS[o.p]) for o in optimized])
+    ns, nsp = grid(p), sparse(p)
+    nmax = maximum(ns)
 
-# ---------------------------------------------------------------- every training set, scored
-rng = Xoshiro(21)
-sets = Tuple{Int,Int,String,Vector{Int}}[]
-for (p, n) in BUDGETS
-    push!(sets, (p, n, "natural", collect(1:n)))
+    # ------------------------------------------------------------ nested families (dense in n)
+    orders = Pair{String,Vector{Int}}["natural" => POOL]
     for d in 1:N_RANDOM
-        push!(sets, (p, n, "random $d", sort(randperm(rng, length(POOL))[1:n])))
+        push!(orders, "random $d" => randperm(rng, NPOOL))
     end
-end
-for o in optimized
-    push!(sets, (o.p, o.n, "rounded", o.rounded))
-    push!(sets, (o.p, o.n, "greedy", o.greedy))
-    push!(sets, (o.p, o.n, "exchanged", o.exchanged))
-end
-write_table(joinpath(OUT, "training_sets.csv"), ["p", "n", "design", "structures"],
-            [(p, n, name, join(train, " ")) for (p, n, name, train) in sets if !startswith(name, "random")])
+    greedy = greedy_select(cost_for(nmax), prob, POOL, nmax).path    # τ of the largest budget
+    push!(orders, "greedy" => greedy)
+    @printf("p = %d: greedy path to n = %d in %.1f min\n", p, nmax, (time() - t0) / 60); flush(stdout)
+    tasks = [(name, n) for (name, _) in orders for n in ns]
+    order_of = Dict(orders)
+    scored = tmap(sort(tasks; by = last, rev = true)) do (name, n)
+        (name, n, score(sort(order_of[name][1:n]), p))
+    end
+    append!(dense_rows, [row(p, n, name, r) for (name, n, r) in scored])
 
-println("scoring ", length(sets), " training sets"); flush(stdout)
-scored = tmap(sets) do (p, n, name, train)
-    r = try
-        risks(X, PRIOR, train, p, TRUTHS)
-    catch e
-        println("  p = $p, n = $n, $name failed: ", sprint(showerror, e)); flush(stdout)
-        (; expected = NaN, heldout = fill(NaN, length(TRUTHS)), expected_alias = NaN,
-         param_alias = fill(NaN, length(TRUTHS)), aliasing_norm = NaN)
+    # ------------------------------------------------------------ the plan's method (sparse in n)
+    for n in nsp
+        t1 = time()
+        c = cost_for(n)
+        rel = optimize_weights(c, prob, POOL, fill(1 / NPOOL, NPOOL); cap = 1 / n, η = 8, maxiter = POOL_MAXITER)
+        rounded = select_points(rel.weights, n)
+        ex = (start) -> exchange(c, prob, POOL, start; candidates = EXCHANGE_CANDIDATES,
+                                 maxiter = EXCHANGE_SWEEPS, fast = true)
+        full = ex(rounded)
+        g = sort(greedy[1:n])
+        gx = ex(g)
+        sets = ["Fisher–Rao + rounding" => rounded, "steps 1–4" => full.selected,
+                "greedy + step 4" => gx.selected]
+        for (name, train) in sets
+            push!(sparse_rows, row(p, n, name, score(train, p)))
+        end
+        S = [cost(c, prob, POOL[s]) for s in (rounded, full.selected, g, gx.selected)]
+        push!(cost_rows, (p, n, rel.cost, S...))
+        @printf("  n = %4d: relaxed %.4g | rounded %.4g → steps 1–4 %.4g (%d swaps) | greedy %.4g → +step 4 %.4g (%d swaps) | %.1f min\n",
+                n, rel.cost, S[1], S[2], full.swaps, S[3], S[4], gx.swaps, (time() - t1) / 60); flush(stdout)
     end
-    (p, n, name, r)
+    @printf("p = %d done in %.1f min\n", p, (time() - t0) / 60); flush(stdout)
 end
-write_table(joinpath(OUT, "budget.csv"),
-            ["p", "n", "design", "expected_risk", "expected_aliasing",
-             ("heldout_risk_truth_$k" for k in TRUTH_KINDS)..., "floor"],
-            [(p, n, name, r.expected, r.expected_alias, r.heldout..., FLOORS[p]) for (p, n, name, r) in scored])
+write_table(joinpath(OUT, "budget_dense.csv"), HEADER, dense_rows)
+write_table(joinpath(OUT, "budget_sparse.csv"), HEADER, sparse_rows)
+write_table(joinpath(OUT, "method_costs.csv"),
+            ["p", "n", "relaxed", "fisher_rao_rounding", "steps_1_4", "greedy", "greedy_step4"], cost_rows)
 
 # ---------------------------------------------------------------- figures
-kind_name(name) = startswith(name, "random") ? "random" : name
-heldout_of(p, n, kind, k) = [r.heldout[k] for (pp, nn, name, r) in scored if pp == p && nn == n && kind_name(name) == kind]
-q(v, a) = isempty(v) ? NaN : quantile(filter(isfinite, v), a)
+family(name) = startswith(name, "random") ? "random" : name
+pick(rows, p, fam, col) = begin
+    sel = [r for r in rows if r[1] == p && family(r[3]) == fam]
+    ns = sort(unique(r[2] for r in sel))
+    ns, [[r[col] for r in sel if r[2] == n] for n in ns]
+end
+q(v, a) = (f = filter(isfinite, v); isempty(f) ? NaN : quantile(f, a))
+const PANELS = [(4, "expected risk"), (5, "held-out risk (truth: prior)"), (6, "held-out risk (truth: unit)"),
+                (7, "expected aliasing"), (8, "aliasing norm ‖A‖₂")]
+const STYLE = Dict("natural" => (:darkorange, :solid), "greedy" => (:purple, :solid),
+                   "Fisher–Rao + rounding" => (:green, :diamond), "steps 1–4" => (:red, :circle),
+                   "greedy + step 4" => (:black, :star5))
 
-for (k, truth) in enumerate(TRUTH_KINDS)
-    fig = plot(layout = (length(P_LIST), 1), size = (800, 330 * length(P_LIST)), left_margin = 10Plots.mm,
-               bottom_margin = 5Plots.mm, yscale = :log10, legend = :topright)
-    savings = plot(size = (800, 450), xlabel = "budget n / p", ylabel = "random structures needed ÷ n",
-                   title = "Random structures needed to match the optimized set (truth: $truth)",
-                   legend = :topright)
-    for (i, p) in enumerate(P_LIST)
-        ns = sort(unique(n for (pp, n) in BUDGETS if pp == p))
-        med = [q(heldout_of(p, n, "random", k), 0.5) for n in ns]
-        lo, hi = [q(heldout_of(p, n, "random", k), 0.1) for n in ns], [q(heldout_of(p, n, "random", k), 0.9) for n in ns]
-        plot!(fig[i], ns, med; ribbon = (med .- lo, hi .- med), fillalpha = 0.25,
-              label = "random (median, 10–90%)", marker = :circle, ms = 3)
-        for kind in ("natural", "rounded", "greedy", "exchanged")
-            plot!(fig[i], ns, [q(heldout_of(p, n, kind, k), 0.5) for n in ns]; label = kind, marker = :circle, ms = 3)
+for p in P_LIST
+    fig = plot(layout = (length(PANELS), 1), size = (900, 300 * length(PANELS)), yscale = :log10,
+               legend = :topright, left_margin = 12Plots.mm, link = :x, xlabel = "training structures n")
+    for (k, (col, label)) in enumerate(PANELS)
+        ns, v = pick(dense_rows, p, "random", col)
+        med = [q(x, 0.5) for x in v]
+        lo, hi = [q(x, 0.25) for x in v], [q(x, 0.75) for x in v]
+        plot!(fig[k], ns, med; ribbon = (med .- lo, hi .- med), fillalpha = 0.25, color = :steelblue,
+              label = "random (median, IQR, $N_RANDOM orderings)", ylabel = label)
+        for fam in ("natural", "greedy")
+            ns, v = pick(dense_rows, p, fam, col)
+            plot!(fig[k], ns, first.(v); color = STYLE[fam][1], label = fam == "greedy" ? "greedy (baseline)" : "natural ordering")
         end
-        truth == :prior && hline!(fig[i], [FLOORS[p]]; label = "floor (fit on whole pool)", color = :gray, linestyle = :dash)
-        plot!(fig[i]; title = "p = $p modeled clusters", xlabel = "training structures n",
-              ylabel = "held-out risk (truth: $truth)")
-        # Savings: the budget at which the median random set reaches the exchanged set's risk,
-        # interpolated in log risk; budgets beyond the grid are not extrapolated.
-        best = [q(heldout_of(p, n, "exchanged", k), 0.5) for n in ns]
-        ratio = map(best) do target
-            j = findfirst(<=(target), med)
-            j === nothing ? NaN : j == 1 ? ns[1] :
-                ns[j-1] + (ns[j] - ns[j-1]) * (log(med[j-1]) - log(target)) / (log(med[j-1]) - log(med[j]))
-        end ./ ns
-        plot!(savings, ns ./ p, ratio; label = "p = $p", marker = :circle)
+        for fam in ("Fisher–Rao + rounding", "steps 1–4", "greedy + step 4")
+            ns, v = pick(sparse_rows, p, fam, col)
+            plot!(fig[k], ns, first.(v); color = STYLE[fam][1], marker = STYLE[fam][2], ms = 4, lw = 1, label = fam)
+        end
+        vline!(fig[k], [p]; color = :gray, linestyle = :dash, label = "n = p")
     end
-    save_figure(fig, joinpath(OUT, "budget_truth_$(truth).png"))
-    save_figure(savings, joinpath(OUT, "savings_truth_$(truth).png"))
+    plot!(fig[1]; title = "Cluster expansion ($SOURCE pool): p = $p modeled clusters, $K true clusters")
+    save_figure(fig, joinpath(OUT, "budget_p$(p).png"))
 end
 
-fig = plot(layout = (length(P_LIST), 1), size = (800, 300 * length(P_LIST)), left_margin = 10Plots.mm,
-           yscale = :log10, legend = :topright)
-for (i, p) in enumerate(P_LIST)
-    os = sort([o for o in optimized if o.p == p]; by = o -> o.n)
-    ns = [o.n for o in os]
-    plot!(fig[i], ns, [o.relaxed for o in os]; label = "relaxed weights", marker = :circle, ms = 3)
-    plot!(fig[i], ns, [o.S_rounded for o in os]; label = "rounded (n largest)", marker = :circle, ms = 3)
-    plot!(fig[i], ns, [o.S_greedy for o in os]; label = "greedy", marker = :circle, ms = 3)
-    plot!(fig[i], ns, [o.S_exchanged for o in os]; label = "exchanged", marker = :circle, ms = 3)
-    hline!(fig[i], [FLOORS[p]]; label = "floor", color = :gray, linestyle = :dash)
-    plot!(fig[i]; title = "p = $p: relaxed optimum vs. selected sets", xlabel = "training structures n", ylabel = "design cost")
+# Savings: the smallest budget past which the median random set has reached the greedy + step 4
+# risk (held-out, prior truth), on the dense grid; NaN if it never does within 4p. Shown for n ≥ p.
+savings = plot(size = (800, 450), xlabel = "budget n / p", ylabel = "random structures needed ÷ n",
+               title = "Random structures needed to match greedy + step 4 (held-out risk, prior truth)",
+               titlefontsize = 10, legend = :topleft)
+for p in P_LIST
+    ns, v = pick(dense_rows, p, "random", 5)
+    med = [q(x, 0.5) for x in v]
+    nb, vb = pick(sparse_rows, p, "greedy + step 4", 5)
+    ratio = map(zip(nb, first.(vb))) do (n, target)
+        j = findfirst(i -> ns[i] >= n && med[i] <= target, eachindex(ns))
+        j === nothing ? NaN : ns[j] / n
+    end
+    keep = nb .>= p
+    plot!(savings, nb[keep] ./ p, ratio[keep]; marker = :circle, label = "p = $p")
 end
-save_figure(fig, joinpath(OUT, "rounding.png"))
+save_figure(savings, joinpath(OUT, "savings.png"))
+
+fig = plot(layout = (length(P_LIST), 1), size = (900, 320 * length(P_LIST)), yscale = :log10,
+           legend = :topright, left_margin = 12Plots.mm)
+for (i, p) in enumerate(P_LIST)
+    rs = sort([r for r in cost_rows if r[1] == p]; by = r -> r[2])
+    ns = [r[2] for r in rs]
+    for (j, label, color, m) in ((3, "relaxed optimum (steps 1–2)", :gray, :none),
+                                 (4, "Fisher–Rao + rounding", :green, :diamond),
+                                 (5, "steps 1–4", :red, :circle), (6, "greedy (baseline)", :purple, :utriangle),
+                                 (7, "greedy + step 4", :black, :star5))
+        plot!(fig[i], ns, [r[j] for r in rs]; label, color, marker = m, ms = 4)
+    end
+    vline!(fig[i], [p]; color = :gray, linestyle = :dash, label = "n = p")
+    plot!(fig[i]; title = "p = $p: design cost (expected risk on the pool)", xlabel = "training structures n",
+          ylabel = "design cost")
+end
+save_figure(fig, joinpath(OUT, "method.png"))

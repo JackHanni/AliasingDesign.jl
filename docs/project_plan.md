@@ -84,6 +84,23 @@ $$
 When $n < p$, $G_{\mathcal{MM}}$ is singular: $B$ is a projection, $I - B \ne 0$, and $A$ must be
 computed with the pseudoinverse as in (3).
 
+**Rows, columns, and the two regimes.** Throughout, $n$ is the number of *rows* of the fit (training
+samples: DFT calculations, measurements) and $p$ the number of *columns* (modeled basis functions:
+the clusters kept in the fit). The truth has $p + q$ columns; the $q$ unmodeled ones are the source
+of aliasing. The user fixes $p$ (the model) and the budget $n$; the design chooses *which* $n$ rows.
+Both regimes matter, because experiments are expensive and $n$ is often near or below $p$:
+
+| Regime | Fit $\hat\theta_{\mathcal M} = M_{\mathcal{TM}}^+ y_{\mathcal T}$ | $B$ | Error terms in (6) |
+|---|---|---|---|
+| $n > p$ (more rows than columns) | least squares, unique | $I$ | aliasing $A$, model insufficiency, noise |
+| $n = p$ (interpolation threshold) | interpolates the data | $I$ | the same; random designs often have a near-zero singular value here, so $M_{\mathcal{TM}}^+$ and their risk spike |
+| $n < p$ (more columns than rows) | minimum-norm solution among many exact fits | projection onto the row space | plus data insufficiency $(I - B)\theta_{\mathcal M}$ |
+
+Below $p$ the result depends on the estimator; the plan and the package use the minimum-norm
+fit $M_{\mathcal{TM}}^+ y$ in every regime, as the GAD paper does. Its pseudoinverse can be written
+from either side, $M^+ = (M^\top M)^{-1} M^\top$ for $n \ge p$ and $M^+ = M^\top (M M^\top)^{-1}$ for
+$n < p$ (full rank), which is what the fast pool selection uses (*Discrete domains*).
+
 Predicting with $\hat y_{\mathcal P} = M_{\mathcal{PM}}\hat\theta_{\mathcal M}$ and substituting (3) gives the prediction error
 
 $$
@@ -235,6 +252,17 @@ optimum, and how much the optimum moves.
   average in about 60% of 20,000 trials). Run the flow from several starts and treat the bound as
   empirical. Rounding guarantees from the optimal-design literature (e.g. Allen-Zhu et al.) are
   proved for convex criteria and do not transfer directly.
+- *The bound can be uninformative (found on the JuCE pool, 2026-11-20).* The relaxed cost takes
+  $B = I$ and sees the budget $n$ only through the noise term $\tau = \sigma^2/n$. When the
+  prediction set is the pool itself and the noise is small, uniform weights on the whole pool
+  already reach the relaxed minimum: the fit on every structure, the least-squares projection
+  under the prediction distribution (Finding 2 below, now on a pool). The flow then does not move
+  (p = 100, n = 100–600: weights exactly uniform after 300 iterations), the n largest weights are
+  arbitrary, and the gap (rounded − relaxed) is large at every n. What makes a small budget hard
+  is that the n chosen rows are the only data the fit gets, which fractional weights on all rows
+  cannot express. The relaxation is then no guide, and the exact finite-$n$ cost has to be
+  optimized directly (step 4). Below $p$ the relaxation does not apply at all: its $B = I$ omits
+  the data-insufficiency term.
 
 **Adding measurement noise.** The costs (8)–(9) contain only the error from unmodeled terms
 (bias). Without a noise term the relaxed problem can be degenerate (see *Findings from the first
@@ -445,6 +473,12 @@ distinct structures.
 
 ## Step 4 — Finite-$n$ polish and evaluation
 
+**For expensive experiments, step 4 is the method.** The objective that matters is the exact
+finite-$n$ cost of the $n$ points actually chosen; steps 1–3 only supply a starting design. That
+start is good when the relaxation is informative (the 1D problems, the sloppy model) and
+uninformative when it is degenerate (the cluster expansion; see *Why the relaxation is justified*).
+Step 4 makes no large-$n$ assumption and works for $n < p$, $n = p$ and $n > p$.
+
 The density is optimal only for $n \gg p$. Starting from the step-3 points, minimize the exact
 finite-$n$ cost $S(t_1,\dots,t_n)$, with $A = M_{\mathcal{TM}}^{+}M_{\mathcal{TU}}$ and
 $I - B$ computed from the points, by gradient descent on the points. This is the particle form
@@ -500,7 +534,24 @@ bounds the distance to the best $n$-structure design, provided the relaxed minim
 **Step 4 for a pool: exchange.** Points cannot move, so the particle flow is replaced by the
 discrete analogue from classical optimal design (Fedorov exchange): repeatedly swap a selected
 structure for an unselected one when the swap lowers the exact finite-$n$ cost, until no swap
-helps. The first variation ranks the candidates, so only the most promising swaps need checking.
+helps. The first variation ranks the candidates, so only the most promising swaps need checking
+(for $n < p$, where the weighted fit at the selection does not exist, the best single additions
+rank them instead).
+
+**Fast trials.** A swap changes one row. For Frobenius costs the exact finite-$n$ cost is a trace
+of small matrices that a swap changes by low rank: $p \times p$ matrices ($M^\top M$ and two
+cross terms with the unmodeled block) for $n \ge p$, $n \times n$ blocks of fixed pool-by-pool
+matrices ($M M^\top$, the prior kernel, $M G_{\mathcal P} M^\top$) for $n < p$. A trial then costs
+$O(\min(n,p)^3)$, independent of $q$, instead of a refit at $O(n p (p+q))$; with $q \approx 2{,}000$
+unmodeled clusters this is ~20× faster per swap. Forming $M^\top M$ or $M M^\top$ squares the
+condition number, so trials only rank swaps, and each accepted swap is checked with the exact cost.
+Formulas in `src/selection.jl`.
+
+**Greedy start.** When the relaxation is uninformative, start step 4 from greedy forward selection
+on the same exact cost: add, one structure at a time, the one that lowers the cost most (the
+discrete analogue of following the first variation). The greedy sets are nested, so one pass gives
+a start for every budget. Greedy is a standard baseline, reported as such; the experiments show
+step 4 from the Fisher–Rao start and from the greedy start separately.
 
 ## Worked toy example
 
@@ -635,6 +686,21 @@ the pool, round to $n$ structures, polish by exchange (see *Discrete domains*), 
 random training sets: $\lVert A \rVert$, held-out risk, and risk vs. $p$ (as in Fig. 6 of the
 GAD paper).
 
+*Budget sweep (`ce_budget.jl`).* The use case: the clusters (p) are chosen, and the question is
+which $n$ structures to compute. For p = 50, 100, 300, sweep $n$ densely from $p/4$ to $4p$,
+through the spike at $n = p$, in the style of the paper's figures: one curve per training-set
+family (random orderings, natural ordering, greedy), each a nested ordering evaluated at every
+$n$; the plan's method (Fisher–Rao + rounding; steps 1–4; greedy + step 4) at a sparse set of
+budgets. Report expected and held-out risk (prior and unit-variance truths), expected aliasing and
+$\lVert A\rVert_2$ against $n$; the number of random structures needed to match the method; and the
+design cost of the relaxed optimum against each selection.
+
+**Sloppy model (`sloppy.jl`).** A sum of decaying exponentials with fixed rates spread over two
+decades, linear in the amplitudes; the Fisher information's eigenvalues span ~$10^6$. Random
+times on a uniform grid rarely see the fast modes. Compare random, evenly spaced, log-spaced and
+optimized times against $n$, and the parameter error along each Fisher eigendirection (which
+combinations each design pins down), well specified and with unmodeled rates.
+
 ## Course analyses
 
 - **Identifiability.** The null space of $M_{\mathcal{TM}}^\top M_{\mathcal{TM}}$ is what $I-B$
@@ -659,7 +725,7 @@ GAD paper).
 
 ## Package map
 
-All functions below are implemented and tested (245 tests; `julia run_tests.jl`). Experiment
+All functions below are implemented and tested (347 tests; `julia run_tests.jl`). Experiment
 scripts are in [`experiments/`](../experiments/README.md).
 
 | Step | Function | Status |
@@ -670,7 +736,8 @@ scripts are in [`experiments/`](../experiments/README.md).
 | 1 | `first_variation(c, prob, points, weights)`, including (9b) | done (all norms) |
 | 2 | `optimize_weights` (Fisher–Rao), with `cap = 1/n` for pools (28); `kkt_multiplier`, `kkt_residual` | done |
 | 3 | `sample_points` (quantiles, (25)); `select_points` (pool rounding) | done |
-| 4 | `cost_gradient` (exact finite-$n$, including $I - B$); `optimize_points` (particle flow, (26)); `exchange` (pool) | done |
+| 4 | `cost_gradient` (exact finite-$n$, including $I - B$); `optimize_points` (particle flow, (26)); `exchange` (pool; `fast = true` for any $n$) | done |
+| 4 | `greedy_select` (greedy forward selection on the exact finite-$n$ cost, any $n$; a start for exchange and a baseline) | done |
 
 
 **Implementation notes.**

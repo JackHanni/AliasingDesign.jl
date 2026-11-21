@@ -105,9 +105,11 @@ weight `1/n` on the selection) are tried as additions; `candidates = length(pool
 swap, so the result is then a local optimum over all single swaps. Needs `n ≥ p` for the
 ranking.
 
-`fast = true` (Frobenius costs, `n ≥ p`) ranks the trial swaps with rank-two updates of p × p
-matrices instead of refitting (see `src/selection.jl`), on all threads, and checks the best few
-with the exact cost before accepting one. Much faster when there are many unmodeled functions.
+`fast = true` (Frobenius costs, any `n`) ranks the trial swaps without refitting: rank-two
+updates of p × p matrices for `n ≥ p`, n × n blocks of fixed pool matrices for `n < p` (see
+`src/selection.jl`), on all threads, and checks the best few with the exact cost before accepting
+one. Much faster when there are many unmodeled functions. For `n < p` the additions tried are the
+`candidates` best single additions instead of the lowest first variations.
 """
 function exchange(c::DesignCost, prob::DesignProblem, pool, selected; candidates = 20, maxiter = 1_000,
                   fast = false)

@@ -22,7 +22,7 @@ tables and PNG figures to `experiments/output/<name>/` (not tracked by git; reru
 | `cluster_expansion.jl` | Cluster expansion; Discrete domains | Capped Fisher–Rao → top-n rounding → exchange vs. random training sets: costs, held-out RMSE, the relaxation gap, and risk vs. p. | ~1 min (demo pool); longer on the JuCE pool |
 | `cluster_expansion_paper.jl` | Cluster expansion (GAD paper scale, cf. Fig. 6) | n = 600 training structures, all 2,344 clusters true; expected risk, held-out risk and aliasing vs. p for natural-ordering, random (mean ± std) and optimized training sets. | ~20 min on 16 cores (default p grid); hours with `P_GRID=all` (checkpointed per training set) |
 | `aspect_ratio.jl` | Cluster expansion | Expected risk, held-out risk and aliasing vs. the aspect ratio p/n, several n and random draws per ratio (all points plus mean ± std), random vs. natural ordering. | a few min |
-| `ce_budget.jl` | Cluster expansion (tight budgets) | p fixed (the user's chosen clusters), n = p … 4p: held-out risk vs. n for natural, random, rounded, greedy and exchanged training sets, with the whole-pool floor; how many random structures match the optimized set; relaxed optimum vs. the selected sets. | ~1 min with `P_LIST=20`; ~2 h on 32 cores for the defaults |
+| `ce_budget.jl` | Cluster expansion (budget sweep) | p fixed (the user's chosen clusters), n from p/4 to 4p on a dense grid through n = p, paper-style panels (expected and held-out risk, expected aliasing, ‖A‖₂ vs n): random, natural and greedy orderings (dense) and the plan's method (Fisher–Rao + rounding, steps 1–4, greedy + step 4) at sparse budgets; random structures needed to match; design cost of each method. | ~2 min with `P_LIST=12 N_GRID=12`; a few hours on 32 cores for the defaults |
 | `sloppy.jl` | Sloppy models | Sum of decaying exponentials (Fisher eigenvalues spanning ~10⁶), well specified and with unmodeled rates: held-out risk vs. n for random, even and log grids and optimized times; parameter error along each Fisher eigendirection. | a few min |
 
 `common.jl` holds the shared helpers (multi-start Fisher–Rao, the steps 2–4 pipeline, reference
@@ -113,5 +113,6 @@ prediction points* and *Cluster expansion*).
   only if the relaxed minimum is global; the cost is not convex, so treat it as empirical.
 - The capped relaxation is degenerate for the cluster expansion with the pool as prediction set:
   uniform weights on the whole pool already reach the floor (the fit on every structure), so the
-  Fisher–Rao weights stay uniform and top-n rounding picks arbitrary structures. Tight budgets need
-  the discrete steps instead: `greedy_select` and `exchange(...; fast = true)` (`ce_budget.jl`).
+  Fisher–Rao weights stay uniform and top-n rounding picks arbitrary structures. Small budgets need
+  the exact finite-n cost instead (step 4): `exchange(...; fast = true)`, from the Fisher–Rao start
+  or a `greedy_select` start (`ce_budget.jl`).

@@ -19,15 +19,22 @@ days old. Supporting guides are in `/apps/instructions_for_ai_agents/ai-docs/`.
 ## Sending results back to the laptop
 
 `origin` pushes over a deploy key (ssh alias `github-aliasing`). When a job finishes, push its
-outputs to the `results` branch, keeping `main` free of outputs:
+outputs to the `results` branch, keeping `main` free of outputs. Build the commit from a temporary
+index, without switching branches: `git checkout main` from a branch that tracks the outputs would
+delete them from disk, and the next push would then silently drop every earlier result.
 
 ```
-git checkout -B results
+export GIT_INDEX_FILE=$(mktemp -u)
+git read-tree main
 git add -f experiments/output
-git commit -m "Results: <experiment> <date>"
+git rm -q --cached --ignore-unmatch experiments/output/*/risk_vs_p_partial.csv   # checkpoint
+tree=$(git write-tree); rm -f $GIT_INDEX_FILE; unset GIT_INDEX_FILE
+git update-ref refs/heads/results $(git commit-tree $tree -p main -m "Results: <experiment> <date>")
 git push -f origin results
-git checkout main
 ```
+
+`results` holds every output on disk (each push replaces the branch), so check
+`git ls-tree -r --name-only origin/results experiments/output | wc -l` did not shrink.
 
 Then tell the user the results are pushed; Claude on the laptop pulls them from there.
 
